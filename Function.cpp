@@ -17,11 +17,12 @@ std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func = [](const Mat
 	return result;
 };
 
-std::function<Matrix<double>(const Matrix<double>&)> dsigmoid_func = [](const Matrix<double>& input) {
+std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)> dsigmoid_func = [](const Matrix<double>& input, const Matrix<double> gadient) {
 	Matrix<double> result(input.get_row(), input.get_column());
 	for (int i = 0; i < input.get_row(); i++) {
 		for (int j = 0; j < input.get_column(); j++) {
 			result[i][j] = std::exp(-input[i][j]) / std::pow(double(1) + std::exp(-input[i][j]), 2.0);
+			result[i][j] *= gadient[i][j];
 			if (result[i][j] != result[i][j])
 				result[i][j] = 0.000001;
 		}
@@ -43,11 +44,12 @@ std::function<Matrix<double>(const Matrix<double>&)> tanh_func = [](const Matrix
 	return result;
 };
 
-std::function<Matrix<double>(const Matrix<double>&)> dtanh_func = [](const Matrix<double>& input) {
+std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)> dtanh_func = [](const Matrix<double>& input, const Matrix<double>& gadient) {
 	Matrix<double> result(input.get_row(), input.get_column());
 	for (int i = 0; i < input.get_row(); i++) {
 		for (int j = 0; j < input.get_column(); j++) {
 			result[i][j] = double(1) - std::pow(std::tanh(input[i][j]), 2.0);
+			result[i][j] *= gadient[i][j];
 			if (result[i][j] != result[i][j]) {
 				result[i][j] = 0.0000001;
 			}
@@ -60,14 +62,92 @@ std::function<Matrix<double>(const Matrix<double>&)> linear_func = [](const Matr
 	return input;
 };
 
-std::function<Matrix<double>(const Matrix<double>&)> dlinear_func = [](const Matrix<double>& input) {
-	Matrix<double> result;
+std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)> dlinear_func = [](const Matrix<double>& input, const Matrix<double>& gadient) {
+	Matrix<double> result(input.get_row(), input.get_column());
 	for (int i = 0; i < result.get_row(); i++) {
 		for (int j = 0; j < result.get_column(); j++) {
-			result[i][j] = 1;
+			result[i][j] = gadient[i][j];
 		}
 	}
 	return result;
+};
+
+std::function<Matrix<double>(const Matrix<double>&)> soft_max = [](const Matrix<double>& input) {
+	Matrix<double> result(input.get_row(), input.get_column());
+	long double sum = 0;
+	for (int i = 0; i < input.get_row(); i++) {
+		sum += std::exp(input[i][0]);
+	}
+	for (int i = 0; i < input.get_row(); i++) {
+		result[i][0] = std::exp(input[i][0]) / sum;
+		if (result[i][0] != result[i][0])
+			result[i][0] = 0.000001;
+	}
+	return result;
+};
+
+std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)> dsoft_max = [](const Matrix<double>& input, const Matrix<double>& gadient) {
+	Matrix<double> result(input.get_row(), input.get_column());
+	Matrix<double> y = soft_max(input);
+	for (int i = 0; i < input.get_row(); i++) {
+		result[i][0] = 0;
+	}
+	for (int i = 0; i < input.get_row(); i++) {
+		for (int j = 0; j < input.get_row(); j++) {
+			result[i][0] += (y[i][0] * ((i == j) - y[j][0])) * gadient[j][0];
+			if (result[i][0] != result[i][0])
+				result[i][0] = 0.000001;
+		}
+	}
+	return result;
+};
+
+std::function<Matrix<double>(const Matrix<double>&)> descale_func = [](const Matrix<double>& input) {
+	Matrix<double> result(input.get_row(), input.get_column());
+	double max_value = input[0][0];
+	for (int i = 0; i < input.get_row(); i++) {
+		for (int j = 0; j < input.get_column(); j++) {
+			max_value = std::max(input[i][j], max_value);
+		}
+	}
+	for (int i = 0; i < input.get_row(); i++) {
+		for (int j = 0; j < input.get_column(); j++) {
+			result[i][j] = input[i][j] - max_value;
+		}
+	}
+	return result;
+};
+
+std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)> ddescale_func = [](const Matrix<double>& input, const Matrix<double>& gadient) {
+	Matrix<double> result(input.get_row(), input.get_column());
+	for (int i = 0; i < input.get_row(); i++) {
+		for (int j = 0; j < input.get_column(); j++) {
+			result[i][j] = gadient[i][j];
+		}
+	}
+	return result;
+};
+
+std::function<double(const Matrix<double>&, const Matrix<double>&)> catagorical_CEnt_loss_func = [](const Matrix<double>& input, const Matrix<double>& target) {
+	double result = 0;
+	for (int i = 0; i < input.get_row(); i++) {
+		result += target[i][0] * std::log(input[i][0]);
+	}
+	return result;
+};
+
+std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dcatagorical_CEnt_loss_func = [](const Matrix<double>& input,const Matrix<double>& target) {
+	Matrix<double> result(input.get_row(), input.get_column());
+	for (int i = 0; i < input.get_row(); i++) {
+		result[i][0] = target[i][0] / input[i][0];
+		if (result[i][0] != result[i][0])
+			result[i][0] = 0.0000001;
+	}
+	return result;
+};
+
+std::function<double()> normal_rand_func = []() {
+	return double(std::rand() % 10000) / 10000;
 };
 
 double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2) {
@@ -112,4 +192,61 @@ double get_min(const Matrix<double>& M) {
 		}
 	}
 	return min_value;
+}
+
+std::string get_text(const std::string& str, int& i) {
+	std::string result;
+	while (str[i] != '\0' && str[i] != ':' && str[i] != ' ' && str[i] != ',') {
+		result.insert(result.end(), str[i]);
+		++i;
+	}
+	++i;
+	return result;
+}
+
+double get_number(const std::string& str, int& i) {
+	double result = 0;
+	int dot_pos = -1;
+	while (str[i] != '\0' && str[i] != ':' && str[i] != ' ' && str[i] != ',') {
+		if (dot_pos == -1) {
+			if (str[i] == '.')
+				dot_pos = 1;
+			else {
+				result = result * 10 + (str[i] - '0');
+			}
+		}
+		else if (dot_pos != -1) {
+			result += double(str[i] - '0') * std::pow(10, -dot_pos);
+			dot_pos++;
+		}
+		++i;
+	}
+	++i;
+	return result;
+}
+
+void universal_set_func(std::function<Matrix<double>(const Matrix<double>&)>& func, const std::string& setting, int& i) {
+	std::string a = get_text(setting, i);
+	if (a == "sigmoid")
+		func = sigmoid_func;
+	else if (a == "tanh")
+		func = tanh_func;
+	else if (a == "linear")
+		func = linear_func;
+	else if (a == "soft_max")
+		func = soft_max;
+	else throw "function not found";
+}
+
+void universal_set_func(std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)>& func, const std::string& setting, int& i) {
+	std::string a = get_text(setting, i);
+	if (a == "dsigmoid")
+		func = dsigmoid_func;
+	else if (a == "dtanh")
+		func = dtanh_func;
+	else if (a == "dlinear")
+		func = dlinear_func;
+	else if (a == "dsoft_max")
+		func = dsoft_max;
+	else throw "function not found";
 }

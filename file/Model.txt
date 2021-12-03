@@ -1,5 +1,4 @@
-1 256
-3 50
-4 50
-1 50
+3 256
+5 256
+5 256 func:soft_max dfunc:dsoft_max
 1 256

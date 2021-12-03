@@ -1,17 +1,23 @@
+#pragma once
 #include "Header.h"
 #include "Layer.cpp"
+#include "LayerId.cpp"
 
 extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> dsigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> dtanh_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> dlinear_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
 
 double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
 void set_Matrix(Matrix<double>& M, double value);
 double get_max(const Matrix<double>& M);
 double get_min(const Matrix<double>& M);
+void universal_set_func(std::function<Matrix<double>(const Matrix<double>&)>& func, const std::string& setting, int& i);
+void universal_set_func(std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)>& func, const std::string& setting, int& i);
+std::string get_text(const std::string& str, int& i);
+double get_number(const std::string& str, int& i);
 Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
 
 class LSTM : public Layer {
@@ -19,13 +25,13 @@ public:
 	LSTM() { Layer_type = Layer::LSTM; };
 	LSTM(const std::size_t& size,
 		std::function<Matrix<double>(const Matrix<double>&)> _Iact_func = tanh_func,
-		std::function<Matrix<double>(const Matrix<double>&)> _dIact_func = dtanh_func,
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dIact_func = dtanh_func,
 		std::function<Matrix<double>(const Matrix<double>&)> _Fact_func = sigmoid_func,
-		std::function<Matrix<double>(const Matrix<double>&)> _dFact_func = dsigmoid_func,
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dFact_func = dsigmoid_func,
 		std::function<Matrix<double>(const Matrix<double>&)> _Oact_func = sigmoid_func,
-		std::function<Matrix<double>(const Matrix<double>&)> _dOact_func = dsigmoid_func,
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dOact_func = dsigmoid_func,
 		std::function<Matrix<double>(const Matrix<double>&)> _Kact_func = tanh_func,
-		std::function<Matrix<double>(const Matrix<double>&)> _dKact_func = dtanh_func) :
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dKact_func = dtanh_func) :
 		Iact_func(_Iact_func) ,dIact_func(_dIact_func),
 		Fact_func(_Fact_func), dFact_func(_dFact_func), 
 		Oact_func(_Oact_func), dOact_func(_dOact_func),
@@ -72,6 +78,61 @@ public:
 		c.push_back(init_c);
 		h.push_back(init_h);
 	}
+	LSTM(const LayerId& set) {
+		value.reconstruct(set.Layer_size, 1);
+		Layer_type = Layer::LSTM;
+
+		xO_weight.reconstruct(set.Layer_size, set.Layer_size);
+		xF_weight.reconstruct(set.Layer_size, set.Layer_size);
+		xI_weight.reconstruct(set.Layer_size, set.Layer_size);
+		xK_weight.reconstruct(set.Layer_size, set.Layer_size);
+		hO_weight.reconstruct(set.Layer_size, set.Layer_size);
+		hF_weight.reconstruct(set.Layer_size, set.Layer_size);
+		hI_weight.reconstruct(set.Layer_size, set.Layer_size);
+		hK_weight.reconstruct(set.Layer_size, set.Layer_size);
+
+		Obias.reconstruct(set.Layer_size, 1);
+		Fbias.reconstruct(set.Layer_size, 1);
+		Ibias.reconstruct(set.Layer_size, 1);
+		Kbias.reconstruct(set.Layer_size, 1);
+
+		xO_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		xF_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		xI_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		xK_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		hO_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		hF_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		hI_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		hK_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+
+		Obias_change.reconstruct(set.Layer_size, 1);
+		Fbias_change.reconstruct(set.Layer_size, 1);
+		Ibias_change.reconstruct(set.Layer_size, 1);
+		Kbias_change.reconstruct(set.Layer_size, 1);
+
+		init_c.reconstruct(set.Layer_size, 1);
+		init_h.reconstruct(set.Layer_size, 1);
+
+		init_c_change.reconstruct(set.Layer_size, 1);
+		init_h_change.reconstruct(set.Layer_size, 1);
+		set_Matrix(init_c, 0);
+		set_Matrix(init_h, 0);
+
+		c.push_back(init_c);
+		h.push_back(init_h);
+
+		Iact_func = tanh_func;
+		Fact_func = sigmoid_func;
+		Oact_func = sigmoid_func;
+		Kact_func = tanh_func;
+
+		dIact_func = dtanh_func;
+		dFact_func = dsigmoid_func;
+		dOact_func = dsigmoid_func;
+		dKact_func = dtanh_func;
+
+		set_Layer(set.setting);
+	}
 
 	Matrix<double> feed() {
 		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);
@@ -111,46 +172,50 @@ public:
 			set_Matrix(next_dc, 0);
 			set_Matrix(next_dh, 0);
 
-			Matrix<double> fogot_gate = Fact_func((xF_weight * v[round]) + (hF_weight * h[round]) + Fbias);
-			Matrix<double> output_gate = Oact_func((xO_weight * v[round]) + (hO_weight * h[round]) + Obias);
-			Matrix<double> input_gate = Iact_func((xI_weight * v[round]) + (hI_weight * h[round]) + Ibias);
-			Matrix<double> K = Kact_func((xK_weight * v[round]) + (hK_weight * h[round]) + Kbias);
-			
-			Matrix<double> dfogot_gate = dFact_func((xF_weight * v[round]) + (hF_weight * h[round]) + Fbias);
-			Matrix<double> doutput_gate = dOact_func((xO_weight * v[round]) + (hO_weight * h[round]) + Obias);
-			Matrix<double> dinput_gate = dIact_func((xI_weight * v[round]) + (hI_weight * h[round]) + Ibias);
-			Matrix<double> dK = dKact_func((xK_weight * v[round]) + (hK_weight * h[round]) + Kbias);
+			Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias);
+			Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias);
+			Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h[round]) + Obias);
+			Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias);
+
+			dh = dh + _gadient[round];
+			dc = dc + mul_each(dh, output_gate);
+
+			Matrix<double> dinput_gate = dIact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias, mul_each(dc, K));
+			Matrix<double> dfogot_gate = dFact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));
+			Matrix<double> doutput_gate = dOact_func((xO_weight * value) + (hO_weight * h[round]) + Obias, mul_each(dh, c[round + 1]));
+			Matrix<double> dK = dKact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias, mul_each(dc, input_gate));
 
 			for (int i = 0; i < value.get_row(); i++) {
 				for (int j = 0; j < value.get_row(); j++) {
-					xO_weight_change[i][j] += (_gadient[round][i][0] + dh[i][0]) * c[round + 1][i][0] * doutput_gate[i][0] * v[round][j][0] * learning_rate;
-					hO_weight_change[i][j] += (_gadient[round][i][0] + dh[i][0]) * c[round + 1][i][0] * doutput_gate[i][0] * h[round][j][0] * learning_rate;
-					xI_weight_change[i][j] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * K[i][0] * dinput_gate[i][0] * v[round][j][0] * learning_rate;
-					hI_weight_change[i][j] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * K[i][0] * dinput_gate[i][0] * h[round][j][0] * learning_rate;
-					xF_weight_change[i][j] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * c[round][i][0] * dfogot_gate[i][0] * v[round][j][0] * learning_rate;
-					hF_weight_change[i][j] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * c[round][i][0] * dfogot_gate[i][0] * h[round][j][0] * learning_rate;
-					xK_weight_change[i][j] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * fogot_gate[i][0] * dK[i][0] * v[round][j][0] * learning_rate;
-					hK_weight_change[i][j] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * fogot_gate[i][0] * dK[i][0] * h[round][j][0] * learning_rate;
+					xO_weight_change[i][j] += doutput_gate[i][0] * v[round][j][0] * learning_rate;
+					hO_weight_change[i][j] += doutput_gate[i][0] * h[round][j][0] * learning_rate;
+					xI_weight_change[i][j] += dinput_gate[i][0] * v[round][j][0] * learning_rate;
+					hI_weight_change[i][j] += dinput_gate[i][0] * h[round][j][0] * learning_rate;
+					xF_weight_change[i][j] += dfogot_gate[i][0] * v[round][j][0] * learning_rate;
+					hF_weight_change[i][j] += dfogot_gate[i][0] * h[round][j][0] * learning_rate;
+					xK_weight_change[i][j] += dK[i][0] * v[round][j][0] * learning_rate;
+					hK_weight_change[i][j] += dK[i][0] * h[round][j][0] * learning_rate;
 
-					next_dh[i][0] += (_gadient[round][i][0] + dh[i][0]) * c[round + 1][i][0] * doutput_gate[i][0] * hO_weight[i][j];
-					next_dh[i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * K[i][0] * dinput_gate[i][0] * hI_weight[i][j];
-					next_dh[i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * c[round][i][0] * dfogot_gate[i][0] * hF_weight[i][j];
-					next_dh[i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * fogot_gate[i][0] * dK[i][0] * hK_weight[i][j];
+					next_dh[i][0] += doutput_gate[i][0] * hO_weight_change[i][j];
+					next_dh[i][0] += dinput_gate[i][0] * hI_weight_change[i][j];
+					next_dh[i][0] += dfogot_gate[i][0] * hF_weight_change[i][j];
+					next_dh[i][0] += dK[i][0] * hK_weight_change[i][j];
 
-					flow_gadient[round][i][0] += (_gadient[round][i][0] + dh[i][0]) * c[round + 1][i][0] * doutput_gate[i][0] * xO_weight[i][j];
-					flow_gadient[round][i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * K[i][0] * dinput_gate[i][0] * xI_weight[i][j];
-					flow_gadient[round][i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * c[round][i][0] * dfogot_gate[i][0] * xF_weight[i][j];
-					flow_gadient[round][i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * fogot_gate[i][0] * dK[i][0] * xK_weight[i][j];
+					flow_gadient[round][i][0] += doutput_gate[i][0] * xO_weight_change[i][j];
+					flow_gadient[round][i][0] += dinput_gate[i][0] * xI_weight_change[i][j];
+					flow_gadient[round][i][0] += dfogot_gate[i][0] * xF_weight_change[i][j];
+					flow_gadient[round][i][0] += dK[i][0] * hK_weight_change[i][j];
 				
 				}
-				Obias_change[i][0] += (_gadient[round][i][0] + dh[i][0]) * c[round + 1][i][0] * doutput_gate[i][0] * learning_rate;
-				Ibias_change[i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * K[i][0] * dinput_gate[i][0] * learning_rate;
-				Fbias_change[i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * c[round][i][0] * dfogot_gate[i][0] * learning_rate;
-				Kbias_change[i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * fogot_gate[i][0] * dK[i][0] * learning_rate;
-			
-				next_dc[i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * fogot_gate[i][0];
-				
+				Obias_change[i][0] += doutput_gate[i][0] * learning_rate;
+				Ibias_change[i][0] += dinput_gate[i][0] * learning_rate;
+				Fbias_change[i][0] += dfogot_gate[i][0] * learning_rate;
+				Kbias_change[i][0] += dK[i][0] * learning_rate;
+
 			}
+
+			next_dc = mul_each(dc, fogot_gate);
+
 			dh = next_dh;
 			dc = next_dc;
 			
@@ -251,13 +316,13 @@ public:
 
 	void reconstruct(const std::size_t& size, const std::size_t& next,
 		std::function<Matrix<double>(const Matrix<double>&)> _Iact_func = tanh_func,
-		std::function<Matrix<double>(const Matrix<double>&)> _dIact_func = dtanh_func,
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dIact_func = dtanh_func,
 		std::function<Matrix<double>(const Matrix<double>&)> _Fact_func = sigmoid_func,
-		std::function<Matrix<double>(const Matrix<double>&)> _dFact_func = dsigmoid_func,
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dFact_func = dsigmoid_func,
 		std::function<Matrix<double>(const Matrix<double>&)> _Oact_func = sigmoid_func,
-		std::function<Matrix<double>(const Matrix<double>&)> _dOact_func = dsigmoid_func,
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dOact_func = dsigmoid_func,
 		std::function<Matrix<double>(const Matrix<double>&)> _Kact_func = tanh_func,
-		std::function<Matrix<double>(const Matrix<double>&)> _dKact_func = dtanh_func) {
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dKact_func = dtanh_func) {
 		value.reconstruct(size, 1);
 
 		Iact_func = _Iact_func;
@@ -306,6 +371,61 @@ public:
 		c.push_back(init_c);
 		h.push_back(init_h);
 	}
+	void reconstruct(const LayerId& set) {
+		value.reconstruct(set.Layer_size, 1);
+		Layer_type = Layer::LSTM;
+
+		xO_weight.reconstruct(set.Layer_size, set.Layer_size);
+		xF_weight.reconstruct(set.Layer_size, set.Layer_size);
+		xI_weight.reconstruct(set.Layer_size, set.Layer_size);
+		xK_weight.reconstruct(set.Layer_size, set.Layer_size);
+		hO_weight.reconstruct(set.Layer_size, set.Layer_size);
+		hF_weight.reconstruct(set.Layer_size, set.Layer_size);
+		hI_weight.reconstruct(set.Layer_size, set.Layer_size);
+		hK_weight.reconstruct(set.Layer_size, set.Layer_size);
+
+		Obias.reconstruct(set.Layer_size, 1);
+		Fbias.reconstruct(set.Layer_size, 1);
+		Ibias.reconstruct(set.Layer_size, 1);
+		Kbias.reconstruct(set.Layer_size, 1);
+
+		xO_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		xF_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		xI_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		xK_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		hO_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		hF_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		hI_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+		hK_weight_change.reconstruct(set.Layer_size, set.Layer_size);
+
+		Obias_change.reconstruct(set.Layer_size, 1);
+		Fbias_change.reconstruct(set.Layer_size, 1);
+		Ibias_change.reconstruct(set.Layer_size, 1);
+		Kbias_change.reconstruct(set.Layer_size, 1);
+
+		init_c.reconstruct(set.Layer_size, 1);
+		init_h.reconstruct(set.Layer_size, 1);
+
+		init_c_change.reconstruct(set.Layer_size, 1);
+		init_h_change.reconstruct(set.Layer_size, 1);
+		set_Matrix(init_c, 0);
+		set_Matrix(init_h, 0);
+
+		c.push_back(init_c);
+		h.push_back(init_h);
+
+		Iact_func = tanh_func;
+		Fact_func = sigmoid_func;
+		Oact_func = sigmoid_func;
+		Kact_func = tanh_func;
+
+		dIact_func = dtanh_func;
+		dFact_func = dsigmoid_func;
+		dOact_func = dsigmoid_func;
+		dKact_func = dtanh_func;
+
+		set_Layer(set.setting);
+	}
 
 	void rand_weight(const double& min,const double& max) {
 		for (int i = 0; i < value.get_row(); i++) {
@@ -314,10 +434,11 @@ public:
 				xF_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
 				xI_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
 				xK_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-				hO_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-				hF_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-				hI_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-				hK_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
+
+				hO_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
+				hF_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
+				hI_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
+				hK_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
 			}
 		}
 	}
@@ -329,10 +450,11 @@ public:
 				xF_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
 				xI_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
 				xK_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-				hO_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-				hF_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-				hI_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-				hK_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+
+				hO_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
+				hF_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
+				hI_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
+				hK_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
 			}
 		}
 	}
@@ -344,10 +466,11 @@ public:
 				xF_weight[i][j] = func();
 				xI_weight[i][j] = func();
 				xK_weight[i][j] = func();
-				hO_weight[i][j] = func();
-				hF_weight[i][j] = func();
-				hI_weight[i][j] = func();
-				hK_weight[i][j] = func();
+
+				hO_weight[i][j] = func() / 10;
+				hF_weight[i][j] = func() / 10;
+				hI_weight[i][j] = func() / 10;
+				hK_weight[i][j] = func() / 10;
 			}
 		}
 	}
@@ -359,10 +482,11 @@ public:
 				xF_weight[i][j] = func(value.get_row(), next);
 				xI_weight[i][j] = func(value.get_row(), next);
 				xK_weight[i][j] = func(value.get_row(), next);
-				hO_weight[i][j] = func(value.get_row(), next);
-				hF_weight[i][j] = func(value.get_row(), next);
-				hI_weight[i][j] = func(value.get_row(), next);
-				hK_weight[i][j] = func(value.get_row(), next);
+
+				hO_weight[i][j] = func(value.get_row(), next) / 10;
+				hF_weight[i][j] = func(value.get_row(), next) / 10;
+				hI_weight[i][j] = func(value.get_row(), next) / 10;
+				hK_weight[i][j] = func(value.get_row(), next) / 10;
 			}
 		}
 	}
@@ -416,16 +540,16 @@ public:
 		return Kact_func;
 	}
 
-	std::function<Matrix<double>(const Matrix<double>&)> get_dOact_func() {
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dOact_func() {
 		return dOact_func;
 	}
-	std::function<Matrix<double>(const Matrix<double>&)> get_dFact_func() {
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dFact_func() {
 		return dFact_func;
 	}
-	std::function<Matrix<double>(const Matrix<double>&)> get_dIact_func() {
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dIact_func() {
 		return dIact_func;
 	}
-	std::function<Matrix<double>(const Matrix<double>&)> get_dKact_func() {
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dKact_func() {
 		return dKact_func;
 	}
 	void print_weight() {
@@ -449,9 +573,30 @@ public:
 		print_init();
 	}
 	void print_value() {
+		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);
+		Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);
+		Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h.back()) + Obias);
+		Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h.back()) + Kbias);
 		std::cout << "--------------LSTM Layer----------\n\n";
+		std::cout << "--------value--------\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			std::cout << value[i][0] << "    \t";
+		}std::cout << std::endl;
+		std::cout << "--------input--------\n";
+		for (int i = 0; i < input_gate.get_row(); i++) {
+			std::cout << input_gate[i][0] << "    \t";
+		}std::cout << std::endl;
+		std::cout << "--------fogot--------\n";
+		for (int i = 0; i < fogot_gate.get_row(); i++) {
+			std::cout << fogot_gate[i][0] << "    \t";
+		}std::cout << std::endl;
+		std::cout << "--------output-------\n";
+		for (int i = 0; i < output_gate.get_row(); i++) {
+			std::cout << output_gate[i][0] << "    \t";
+		}std::cout << std::endl;
+		std::cout << "----------K----------\n";
+		for (int i = 0; i < K.get_row(); i++) {
+			std::cout << K[i][0] << "    \t";
 		}std::cout << std::endl;
 	}
 protected:
@@ -566,6 +711,40 @@ protected:
 			}std::cout << std::endl;
 		}
 	}
+
+	void set_Layer(const std::string& setting) {
+		int size = setting.size();
+		int i = 0;
+		std::string a;
+		while (i < size) {
+			a = get_text(setting, i);
+			if (a == "Iact")
+				universal_set_func(Iact_func, setting, i);
+			else if (a == "Fact")
+				universal_set_func(Fact_func, setting, i);
+			else if (a == "Oact")
+				universal_set_func(Oact_func, setting, i);
+			else if (a == "Kact")
+				universal_set_func(Kact_func, setting, i);
+			else if (a == "dIact")
+				universal_set_func(dIact_func, setting, i);
+			else if (a == "dFact")
+				universal_set_func(dFact_func, setting, i);
+			else if (a == "dOact")
+				universal_set_func(dOact_func, setting, i);
+			else if (a == "dKact")
+				universal_set_func(dKact_func, setting, i);
+			else if (a == "learning_rate")
+				set_learning_rate(setting, i);
+			else if (a == "")
+				;
+			else throw "command not found";
+		}
+	}
+	void set_learning_rate(const std::string& str, int& i) {
+		double a = get_number(str, i);
+		learning_rate = a;
+	}
 	Matrix<double> xO_weight;
 	Matrix<double> xF_weight;
 	Matrix<double> xI_weight;
@@ -608,8 +787,8 @@ protected:
 	std::function<Matrix<double>(const Matrix<double>&)> Iact_func = tanh_func;
 	std::function<Matrix<double>(const Matrix<double>&)> Kact_func = tanh_func;
 
-	std::function<Matrix<double>(const Matrix<double>&)> dOact_func = dsigmoid_func;
-	std::function<Matrix<double>(const Matrix<double>&)> dFact_func = dsigmoid_func;
-	std::function<Matrix<double>(const Matrix<double>&)> dIact_func = dtanh_func;
-	std::function<Matrix<double>(const Matrix<double>&)> dKact_func = dtanh_func;
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dOact_func = dsigmoid_func;
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dFact_func = dsigmoid_func;
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dIact_func = dtanh_func;
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dKact_func = dtanh_func;
 };

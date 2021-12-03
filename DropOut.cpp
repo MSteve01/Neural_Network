@@ -1,23 +1,35 @@
+#pragma once
 #include "Header.h"
 #include "Layer.cpp"
+#include "LayerId.cpp"
 
 extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> dsigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> dtanh_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> dlinear_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
+extern std::function<double()> normal_rand_func;
 double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
 void set_Matrix(Matrix<double>& M, double value);
+std::string get_text(const std::string& str, int& i);
+double get_number(const std::string& str, int& i);
 Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
 
 class DropOut : public Layer {
 public:
 	DropOut () { ; };
-	DropOut(const std::size_t& size, std::function<double()> _rand_func = []() {return double(rand() % 10000) / 10000; }) {
+	DropOut(const std::size_t& size,
+		std::function<double()> _rand_func = []() {return double(rand() % 10000) / 10000; }) {
 		Layer_type = DROPOUT;
 		value.reconstruct(size, 1);
 		rand_func = _rand_func;
+	}
+	DropOut(const LayerId& set) {
+		Layer_type = DROPOUT;
+		value.reconstruct(set.Layer_size, 1);
+		rand_func = []() {return double(rand() & 10000) / 10000; };
+		set_layer(set.setting);
 	}
 	Matrix<double> feed() {
 		Matrix<double> filter(value.get_row(),1);
@@ -69,6 +81,12 @@ public:
 
 		fogot_all();
 	}
+	void reconstruct(const LayerId& set) {
+		Layer_type = DROPOUT;
+		value.reconstruct(set.Layer_size, 1);
+		rand_func = []() {return double(rand() & 10000) / 10000; };
+		set_layer(set.setting);
+	}
 	void rand_weight(const double& min, const double& max) {
 		
 	}
@@ -114,12 +132,36 @@ public:
 		return drop_out_rate;
 	}
 	void print_value() {
-		std::cout << "---------Dense Layer----------\n";
+		std::cout << "---------DropOut Layer----------\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			std::cout << value[i][0] << "    \t";
 		}std::cout << std::endl;
 	}
 private:
+	void set_layer(const std::string& setting) {
+		int size = setting.size();
+		int i = 0;
+		while (i < size) {
+			std::string command = get_text(setting, i);
+			if (command == "rand")
+				set_rand_func(setting, i);
+			else if (command == "drop_out_rate")
+				set_drop_out_rate(setting, i);
+			else if (command == "")
+				;
+			else throw "command not found";
+		}
+	}
+	void set_rand_func(const std::string& str, int& i) {
+		std::string a = get_text(str, i);
+		if (a == "normal")
+			rand_func = normal_rand_func;
+		else throw "function not found";
+	}
+	void set_drop_out_rate(const std::string& str, int& i) {
+		double a = get_number(str, i);
+		drop_out_rate = a;
+	}
 	std::function<double()> rand_func;
 	double drop_out_rate = 0.1;
 };

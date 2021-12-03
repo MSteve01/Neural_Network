@@ -1,0 +1,150 @@
+#pragma once
+#include "Header.h"
+#include "Layer.cpp"
+#include "LayerId.cpp"
+
+extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
+extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
+extern std::function<Matrix<double>(const Matrix<double>&)> descale_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> ddescale_func;
+double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
+void set_Matrix(Matrix<double>& M, double value);
+std::string get_text(const std::string& str, int& i);
+void universal_set_func(std::function<Matrix<double>(const Matrix<double>&)>& func, const std::string& setting, int& i);
+void universal_set_func(std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)>& func, const std::string& setting, int& i);
+Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
+
+class Filter : public Layer {
+public:
+	Filter() { ; };
+	Filter(const std::size_t& size,
+		std::function<Matrix<double>(const Matrix<double>&)> _func = descale_func,
+		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dfunc = ddescale_func) :
+		func(_func) , dfunc(_dfunc)
+	{
+		Layer_type = Layer::FILTER;
+		value.reconstruct(size, 1);
+	}
+	Filter(const LayerId& set) {
+		Layer_type = Layer::FILTER;
+		func = descale_func;
+		dfunc = ddescale_func;
+
+		value.reconstruct(set.Layer_size, 1);
+		set_Layer(set.setting);
+	}
+	Matrix<double> feed() {
+		v.push_back(value);
+		return func(value);
+	}
+	std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient) {
+		int start_pos = v.size() - gadient.size();
+		std::vector<Matrix<double>> result;
+		for (int round = 0; round < gadient.size(); round++) {
+			result.push_back(Matrix<double>(value.get_row(), 1));
+			result.back() = dfunc(v[round + start_pos], gadient[round]);
+		}
+		return result;
+	}
+	void fogot(const std::size_t& number) {
+		int h = number;
+		if (number > v.size())
+			h = v.size();
+		for (int i = 0; i < v.size() - h; i++) {
+			v[i] = v[i + h];
+		}
+		for (int i = 0; i < h; i++) {
+			v.pop_back();
+		}
+	}
+	void fogot_all() {
+		fogot(v.size());
+	}
+	void change_dependencies() {
+
+	}
+	void set_change_dependencies(const double& number) {
+
+	}
+	void mul_change_dependencies(const double& number) {
+
+	}
+	void reconstruct(const std::size_t& size,
+	std::function<Matrix<double>(const Matrix<double>&)> _func,
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dfunc) {
+		func = _func;
+		dfunc = _dfunc;
+		value.reconstruct(size, 1);
+		
+		fogot_all();
+
+	}
+	void reconstruct(const LayerId& set) {
+		func = descale_func;
+		dfunc = ddescale_func;
+		value.reconstruct(set.Layer_size, 1);
+
+		fogot_all();
+		set_Layer(set.setting);
+	}
+	void rand_weight(const double& min, const double& max) {
+
+	}
+
+	void rand_weight(std::pair<const double&, const double&> setting) {
+
+	}
+
+	void rand_weight(std::function<double()> func) {
+
+	}
+
+	void rand_weight(std::function<double(std::size_t, std::size_t)> func, std::size_t next) {
+
+	}
+
+	void rand_bias(const double& min, const double& max) {
+
+	}
+
+	void rand_bias(std::pair<const double&, const double&> setting) {
+
+	}
+
+	void rand_bias(std::function<double()> func) {
+
+	}
+
+	void rand_bias(std::function<double(std::size_t, std::size_t)> func, std::size_t next) {
+
+	}
+
+	void print_value() {
+		std::cout << "---------Filter Layer----------\n";
+		for (int i = 0; i < value.get_row(); i++) {
+			std::cout << value[i][0] << "    \t";
+		}std::cout << std::endl;
+	}
+private:
+	void set_Layer(const std::string& setting) {
+		int size = setting.size();
+		int i = 0;
+		std::string a;
+		while (i < size) {
+			a = get_text(setting, i);
+			if (a == "func")
+				universal_set_func(func, setting, i);
+			else if (a == "dfunc")
+				universal_set_func(dfunc, setting, i);
+			else if (a == "")
+				;
+			else throw "command not found";
+		}
+	}
+	std::function<Matrix<double>(const Matrix<double>&)> func;
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dfunc;
+};

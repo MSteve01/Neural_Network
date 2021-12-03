@@ -4,12 +4,12 @@
 #include "Matrix.cpp"
 
 extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> dsigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
 extern class Neural_Network;
 
 class Layer {
 public:
-	enum type {UNDEFINED,DENSE,RNN,LSTM,DROPOUT};
+	enum type {UNDEFINED,DENSE,RNN,LSTM,DROPOUT,FILTER};
 	Layer() {};
 	Layer(const type& _Layer_type,const std::size_t& size,const double& _learning_rate = 0.1) {
 		Layer_type = _Layer_type;

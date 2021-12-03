@@ -17,6 +17,12 @@ int output_range;
 int have_trained = 0;
 double train_speed = 1;
 int load_range = 0;
+extern std::function<double(const Matrix<double>&, const Matrix<double>&)> catagorical_CEnt_loss_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dcatagorical_CEnt_loss_func;
+extern std::function<Matrix<double>(const Matrix<double>&)> soft_max;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsoft_max;
+extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
 void print_time(long long int input) {
 	long long int second = input / 1000;
 	long long int minute = (second - (second % 60)) / 60;
@@ -68,7 +74,8 @@ std::vector<LayerId> load_model() {
 	std::ifstream Model_file(Model_file_name);
 	while (!Model_file.eof()) {
 		int input1, input2; Model_file >> input1 >> input2;
-		Model.push_back(LayerId(Layer::type(input1), input2));
+		std::string setting; std::getline(Model_file, setting);
+		Model.push_back(LayerId(Layer::type(input1), input2, setting));
 	}
 	Model_file.close();
 	return Model;
@@ -84,7 +91,8 @@ std::vector<Matrix<double>> load_data(std::size_t input_size) {
 		}
 	}
 	return Data;
-}std::vector<Matrix<double>> load_data(std::size_t input_size, std::size_t data_range) {
+}
+std::vector<Matrix<double>> load_data(std::size_t input_size, std::size_t data_range) {
 	int loop = 0;
 	std::vector<Matrix<double>> Data;
 	static std::ifstream DataBase_file(DataBase_file_name);
@@ -146,10 +154,11 @@ double learn(Neural_Network& AI, std::vector<Matrix<double>> Data, int start) {
 		AI.feedforward(Data[i]);
 	}
 
+	//AI.set_change_dependencies(0);
 	AI.mul_change_dependencies(4);
 	for (int i = start + input_range; i < start + input_range + output_range; i++) {
 		AI.backpropagation(Data[i]);
-		lost += compute_lost(AI.get_output(), Data[i]);
+		lost += AI.get_loss(Data[i]);
 	}
 	AI.mul_change_dependencies(0.2);
 
@@ -158,10 +167,7 @@ double learn(Neural_Network& AI, std::vector<Matrix<double>> Data, int start) {
 	AI.fogot_all();
 	//std::cout << lost << std::endl;
 
-	auto end_time = std::chrono::system_clock::now();
-	std::chrono::duration<double> d = end_time - start_time;
-	train_speed = d.count() * 1000;
-	return std::sqrt(lost);
+	return lost;
 }
 
 std::vector<Matrix<double>> predict(Neural_Network& AI, std::vector<Matrix<double>> Data, int start) {
@@ -172,7 +178,7 @@ std::vector<Matrix<double>> predict(Neural_Network& AI, std::vector<Matrix<doubl
 
 	for (int i = start + input_range; i < start + input_range + output_range; i++) {
 		result.push_back(Matrix<double>(AI.get_input_size(), 1)); result.back() = AI.get_output();
-		AI.feedforward(result.back());
+		//AI.feedforward(result.back());
 	}
 
 	AI.fogot_all();
@@ -182,7 +188,8 @@ std::vector<Matrix<double>> predict(Neural_Network& AI, std::vector<Matrix<doubl
 int main() {
 	try {
 		std::srand(std::time(0));
-		Neural_Network AI(load_model()); std::cout << "Model was leaded successfully\n";
+		Neural_Network AI(load_model(), catagorical_CEnt_loss_func, dcatagorical_CEnt_loss_func); std::cout << "Model was leaded successfully\n";
+		
 		std::vector<Matrix<double>> Data; // = load_data(AI.get_input_size()); std::cout << "Data was loaded successfully\n";
 		//data_range = Data.size(); std::cout << "Data range : " << data_range << "\nlearning range : ";
 		std::cout << "data range : "; std::cin >> data_range; std::cout << "load_range : "; std::cin >> load_range; std::cout << "learing range : ";
@@ -205,7 +212,6 @@ int main() {
 		AI.set_all_learning_rate(0.0001);
 		AI.rand_weight(Weight_setting);
 		AI.rand_bias(Bias_setting);
-		AI.set_all_drop_out_rate(0.1);
 		AI.set_change_dependencies(0);
 		//	std::thread s1(print_process);
 		std::ofstream output_file(output_file_name);
@@ -233,18 +239,26 @@ int main() {
 			*/
 			//output_file << AI.get_output()[0][0] << std::endl;
 			int spos;
-			double smax = -10000000;
-			for (int i = 0; i < 256; i++) {
-				if (smax < AI.get_output()[i][0]) {
-					spos = i;
-					smax = AI.get_output()[i][0];
+			for (int j = 0; j < output_range; j++) {
+				double smax = -10000000;
+				for (int i = 0; i < 256; i++) {
+					if (smax < AI.get_output()[i][0]) {
+						spos = i;
+						smax = AI.get_output()[i][0];
+					}
 				}
+
+
+				std::cout << " " << char(spos);
+				double max_data = -10000; int super_pos;
 			}
-
-
-			std::cout << "     " << char(spos);
-			double max_data = -10000; int super_pos;
-			if (i % 30 == 0) {
+			if (i % 1000 == 0) {
+				//AI.print_value();
+				//std::cin.get();
+				//AI.print_weight();
+				///std::cin.get();
+				//AI.print_bias();
+				//std::cin.get();
 				//system("CLS");
 				for (int i = 0; i < 256; i++) {
 					if (i == spos)
@@ -258,37 +272,42 @@ int main() {
 						std::cout << "\n";
 				}
 			}
-
-			for (int q = 0; q < 256; q++) {
-				if (Data[pos][q][0]) {
-					std::cout << char(q) << std::endl;
-					break;
+			std::cout << "	|	";
+			for (int j = 0; j < output_range; j++) {
+				for (int q = 0; q < 256; q++) {
+					if (Data[pos + input_range + j][q][0]) {
+						std::cout << char(q) << " ";
+						break;
+					}
 				}
-			}
+			}std::cout << std::endl;
 		}
 		std::cout << "started testing\n";
 		Data = load_data(AI.get_input_size(), input_range);
-		for (int i = 0; i + input_range + output_range < testing_range; i++) {
-			predict(AI, Data, i);
-			Matrix<double> output(256, 1);
-			output = AI.get_output();
-			double max = -1, pos;
-			Data.push_back(Matrix<double>(AI.get_input_size(), 1));
-			for (int j = 0; j < 256; j++) {
-				if (output[j][0] > max) {
-					max = output[j][0];
-					pos = j;
+		for (int i = 0; i + input_range + output_range < testing_range; i+=output_range) {
+			std::vector<Matrix<double>> output = predict(AI, Data, i);
+			for (int k = 0; k < output_range; k++) {
+				Data.push_back(output[k]);
+				double pos = 0;
+				double max = 1000000;
+				for (int j = 0; j < 256; j++) {
+					if (output[k][j][0] > max) {
+						max = output[k][j][0];
+						pos = j;
+					}
+					Data.back()[j][0] = 0;
 				}
-				Data.back()[j][0] = 0;
+				output_file << char(pos);
+				Data.back()[pos][0] = 1;
 			}
-			output_file << char(pos);
-			Data.back()[pos][0] = 1;
 		}
 		//	s1.join();
 		return 0;
 	}
 	catch (std::string Error) {
 		std::cout << Error << std::endl;
+		std::cin.get();
+		return 0;
 	}
 	std::cin.get();
 }
