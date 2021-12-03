@@ -35,7 +35,7 @@ public:
 		for (int i = 0; i < row; i++) {
 			delete value[i];
 		}
-		delete value;
+		delete[] value;
 	}
 
 	Matrix<t>& operator=(const Matrix<t>& rhs) {
@@ -121,6 +121,9 @@ public:
 private:
 	void destroy() {
 		if (value != nullptr) {
+			for (int i = 0; i < row; i++) {
+				delete value[i];
+			}
 			delete[] value;
 		}
 		row = NULL;

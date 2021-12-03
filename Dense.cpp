@@ -33,43 +33,75 @@ public:
 	Matrix<double> feed()  {
 		if (!weight.is_constructed())
 			throw "Undefined weight";
+		v.push_back(value);
 		return act_func((weight * value) + bias);
 	}
-	Matrix<double> propagation(const Matrix<double>& gadient)  {
-		Matrix<double> doutput = dact_func((weight * value) + bias);
+	std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient)  {
+		if (gadient.size() > v.size())
+			throw "invalid gadient size for  backpropagation";
 
-		Matrix<double> value_change(value.get_row(), value.get_column());
+		const std::size_t start_pos = v.size() - gadient.size();
 
-		for (int i = 0; i < weight.get_row(); i++) {
-			for (int j = 0; j < weight.get_column(); j++) {
-				weight_change[i][j] = value[j][0] * gadient[i][0] * doutput[i][0] * learning_rate;
+		std::vector<Matrix<double>> doutput;
+		for (int round = 0; round < v.size(); round++) {
+			doutput.push_back(dact_func((weight * v[round]) + bias));
+		}
+
+		std::vector<Matrix<double>> value_change;
+
+		for (int round = 0; round < gadient.size(); round++) {
+			for (int i = 0; i < weight.get_row(); i++) {
+				for (int j = 0; j < weight.get_column(); j++) {
+					weight_change[i][j] += gadient[round][i][0] * v[round + start_pos][j][0] * doutput[round + start_pos][i][0] * learning_rate;
+				}
 			}
 		}
 
-		for (int i = 0; i < bias.get_row(); i++) {
-			bias_change[i][0] = gadient[i][0] * doutput[i][0] * learning_rate;
+		for (int round = 0; round < gadient.size(); round++) {
+			for (int i = 0; i < bias.get_row(); i++) {
+				bias_change[i][0] += gadient[round][i][0] * doutput[round +  start_pos][i][0] * learning_rate;
+			}
 		}
 
-		set_Matrix(value_change, 0);
-		for (int i = 0; i < weight.get_row(); i++) {
-			for (int j = 0; j < weight.get_column(); j++) {
-				value_change[j][0] += weight[i][j] * gadient[i][0] * doutput[i][0];
+		for (int round = 0; round < gadient.size(); round++) {
+			value_change.push_back(Matrix<double>(value.get_row(), 1));
+			set_Matrix(value_change.back(), 0);
+			for (int i = 0; i < weight.get_row(); i++) {
+				for (int j = 0; j < weight.get_column(); j++) {
+					value_change.back()[j][0] += gadient[round][i][0] * weight[i][j] * doutput[round + start_pos][i][0];
+				}
 			}
 		}
 
 		return value_change;
 	}
+	
+	void fogot(const std::size_t& number) {
+		int h = number;
+		if (number > v.size())
+			h = v.size();
+		for (int i = 0; i < v.size() - h; i++) {
+			v[i] = v[i + h];
+		}
+		for (int i = 0; i < h; i++) {
+			v.pop_back();
+		}
+	}
+	void fogot_all() {
+		fogot(v.size());
+	}
 	void change_dependencies() {
 		weight = weight + weight_change;
 		bias = bias + bias_change;
 	}
-	void set_dependencies(const double& value) {
+	void set_change_dependencies(const double& value) {
 		set_Matrix(weight_change, value);
 		set_Matrix(bias_change, value);
 	}
 	void reconstruct(const std::size_t& size, const std::size_t& next,
 		std::function<Matrix<double>(const Matrix<double>&)> _act_func = sigmoid_func,
 		std::function<Matrix<double>(const Matrix<double>&)> _dact_func = dsigmoid_func) {
+		fogot_all();
 		value.reconstruct(size, 1);
 		weight.reconstruct(next, size);
 		bias.reconstruct(next, 1);
@@ -133,9 +165,6 @@ public:
 	}
 	std::function<Matrix<double>(const Matrix<double>&)> get_dact_func() {
 		return dact_func;
-	}
-	Matrix<double> get_value() {
-		return value;
 	}
 	
 protected:
