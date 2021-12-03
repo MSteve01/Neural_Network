@@ -5,8 +5,13 @@ extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> dsigmoid_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> dtanh_func;
+extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
+extern std::function<Matrix<double>(const Matrix<double>&)> dlinear_func;
+
 double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
 void set_Matrix(Matrix<double>& M, double value);
+double get_max(const Matrix<double>& M);
+double get_min(const Matrix<double>& M);
 Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
 
 class LSTM : public Layer {
@@ -84,8 +89,10 @@ public:
 		if (gadient.size() > c.size())
 			throw "invalid gaadient  size for  backpropagatoin lstm";
 
-		Matrix<double> dc(value.get_row(), 1); set_Matrix(dc, 0);
-		Matrix<double> dh(value.get_row(), 1); set_Matrix(dh, 0);
+		Matrix<double> dc(value.get_row(), 1); 
+		set_Matrix(dc, 0);
+		Matrix<double> dh(value.get_row(), 1); 
+		set_Matrix(dh, 0);
 		Matrix<double> next_dc(value.get_row(), 1);
 		Matrix<double> next_dh(value.get_row(), 1);
 		std::vector<Matrix<double>> _gadient;
@@ -135,7 +142,6 @@ public:
 					flow_gadient[round][i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * c[round][i][0] * dfogot_gate[i][0] * xF_weight[i][j];
 					flow_gadient[round][i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * fogot_gate[i][0] * dK[i][0] * xK_weight[i][j];
 				
-					
 				}
 				Obias_change[i][0] += (_gadient[round][i][0] + dh[i][0]) * c[round + 1][i][0] * doutput_gate[i][0] * learning_rate;
 				Ibias_change[i][0] += ((_gadient[round][i][0] + dh[i][0]) * output_gate[i][0] + dc[i][0]) * K[i][0] * dinput_gate[i][0] * learning_rate;
@@ -147,11 +153,19 @@ public:
 			}
 			dh = next_dh;
 			dc = next_dc;
+			
+			// try to descale exploding gadient
+			double max_dh_value = std::max(get_max(dh), std::abs(get_min(dh)));
+			double max_dc_value = std::max(get_max(dc), std::abs(get_min(dc)));
+			
+			double flow_cap = std::sqrt(double(2) / v.size());
+			if (max_dh_value > flow_cap) dh = dh * (flow_cap / max_dh_value);
+			if (max_dc_value > flow_cap) dc = dc * (flow_cap / max_dc_value);
 		}
 
 		for (int i = 0; i < value.get_row(); i++) {
-			init_h_change[i][0] += dh[i][0];
-			init_c_change[i][0] += dc[i][0];
+			init_h_change[i][0] += dh[i][0] * learning_rate;
+			init_c_change[i][0] += dc[i][0] * learning_rate;
 		}
 
 		return flow_gadient;
@@ -198,25 +212,41 @@ public:
 		init_h = init_h + init_h_change;
 	}
 	void set_change_dependencies(const double& number) {
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				xO_weight_change[i][j] = number;
-				xF_weight_change[i][j] = number;
-				xI_weight_change[i][j] = number;
-				xK_weight_change[i][j] = number;
-				hO_weight_change[i][j] = number;
-				hF_weight_change[i][j] = number;
-				hI_weight_change[i][j] = number;
-				hK_weight_change[i][j] = number;
-			}
-			Obias_change[i][0] = number;
-			Fbias_change[i][0] = number;
-			Ibias_change[i][0] = number;
-			Kbias_change[i][0] = number;
+		set_Matrix(xO_weight_change,number);
+		set_Matrix(xF_weight_change,number);
+		set_Matrix(xI_weight_change,number);
+		set_Matrix(xK_weight_change,number);
+		set_Matrix(hO_weight_change,number);
+		set_Matrix(hF_weight_change,number);
+		set_Matrix(hI_weight_change,number);
+		set_Matrix(hK_weight_change,number);
 
-			init_c_change[i][0] = number;
-			init_h_change[i][0] = number;
-		}
+		set_Matrix(Obias_change,number);
+		set_Matrix(Fbias_change,number);
+		set_Matrix(Ibias_change,number);
+		set_Matrix(Kbias_change,number);
+
+		set_Matrix(init_c_change,number);
+		set_Matrix(init_h_change,number);
+	}
+
+	void mul_change_dependencies(const double& number) {
+		xO_weight_change = xO_weight_change * number;
+		xF_weight_change = xF_weight_change * number;
+		xI_weight_change = xI_weight_change * number;
+		xK_weight_change = xK_weight_change * number;
+		hO_weight_change = hO_weight_change * number;
+		hF_weight_change = hF_weight_change * number;
+		hI_weight_change = hI_weight_change * number;
+		hK_weight_change = hK_weight_change * number; 
+
+		Obias_change = Obias_change * number;
+		Fbias_change = Fbias_change * number;
+		Ibias_change = Ibias_change * number;
+		Kbias_change = Kbias_change * number;
+
+		init_c_change = init_c_change * number;
+		init_h_change = init_h_change * number;
 	}
 
 	void reconstruct(const std::size_t& size, const std::size_t& next,
@@ -306,6 +336,36 @@ public:
 			}
 		}
 	}
+	
+	void rand_weight(std::function<double()> func) {
+		for (int i = 0; i < value.get_row(); i++) {
+			for (int j = 0; j < value.get_row(); j++) {
+				xO_weight[i][j] = func();
+				xF_weight[i][j] = func();
+				xI_weight[i][j] = func();
+				xK_weight[i][j] = func();
+				hO_weight[i][j] = func();
+				hF_weight[i][j] = func();
+				hI_weight[i][j] = func();
+				hK_weight[i][j] = func();
+			}
+		}
+	}
+
+	void rand_weight(std::function<double(std::size_t,std::size_t)> func,std::size_t next) {
+		for (int i = 0; i < value.get_row(); i++) {
+			for (int j = 0; j < value.get_row(); j++) {
+				xO_weight[i][j] = func(value.get_row(),next);
+				xF_weight[i][j] = func(value.get_row(), next);
+				xI_weight[i][j] = func(value.get_row(), next);
+				xK_weight[i][j] = func(value.get_row(), next);
+				hO_weight[i][j] = func(value.get_row(), next);
+				hF_weight[i][j] = func(value.get_row(), next);
+				hI_weight[i][j] = func(value.get_row(), next);
+				hK_weight[i][j] = func(value.get_row(), next);
+			}
+		}
+	}
 
 	void rand_bias(const double& min, const double& max) {
 		for (int i = 0; i < value.get_row(); i++) {
@@ -325,6 +385,23 @@ public:
 		}
 	}
 	
+	void rand_bias(std::function<double()> func) {
+		for (int i = 0; i < value.get_row(); i++) {
+			Obias[i][0] = func();
+			Fbias[i][0] = func();
+			Ibias[i][0] = func();
+			Kbias[i][0] = func();
+		}
+	}
+
+	void rand_bias(std::function<double(std::size_t,std::size_t)> func,std::size_t next) {
+		for (int i = 0; i < value.get_row(); i++) {
+			Obias[i][0] = func(value.get_row(),next);
+			Fbias[i][0] = func(value.get_row(), next);
+			Ibias[i][0] = func(value.get_row(), next);
+			Kbias[i][0] = func(value.get_row(), next);
+		}
+	}
 
 	std::function<Matrix<double>(const Matrix<double>&)> get_Oact_func() {
 		return Oact_func;

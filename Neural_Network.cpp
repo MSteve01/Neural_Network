@@ -4,6 +4,7 @@
 #include "Dense.cpp"
 #include "LSTM.cpp"
 #include "Layerid.cpp"
+#include "DropOut.cpp"
 
 class Neural_Network {
 public:
@@ -18,7 +19,12 @@ public:
 			else if (_layer[i].Layer_type == Layer::type::LSTM) {
 				layer.push_back(new LSTM(_layer[i].Layer_size));
 				if (_layer[i + 1].Layer_size != _layer[i].Layer_size)
-					throw "invalid Layer afte lstm size";
+					throw "invalid size Layer afte lstm";
+			}
+			else if (_layer[i].Layer_type == Layer::type::DROPOUT) {
+				layer.push_back(new DropOut(_layer[i].Layer_size));
+				if (_layer[i + 1].Layer_size != _layer[i].Layer_size)
+					throw "invalid Layer size after Dropout";
 			}
 		}
 		if (_layer[_Layer_size - 1].Layer_type != Layer::DENSE)
@@ -37,6 +43,10 @@ public:
 				LSTM* _layer = static_cast<LSTM*>(copy.layer[i]);
 				layer.push_back(new LSTM(_layer->get_size()));
 			}
+			else if (copy.layer[i]->get_type() == Layer::DROPOUT) {
+				DropOut* _layer = static_cast<DropOut*>(copy.layer[i]);
+				layer.push_back(new DropOut(_layer->get_size(),_layer->get_rand_func()));
+			}
 		}
 		layer.push_back(new Dense(copy.layer.back()->get_size()));
 	}
@@ -51,8 +61,44 @@ public:
 			else if (layer[i]->Layer_type == Layer::LSTM) {
 				static_cast<LSTM*>(layer[i])->rand_weight(setting[i]);
 			}
+			else if (layer[i]->Layer_type == Layer::DROPOUT) {
+				// drop out layer dotn have weight
+			}
 		}
 	}
+
+	void rand_weight(const std::vector<std::function<double()>>& setting) {
+		if (setting.size() != layer.size() - 1)
+			throw "Invalid random weight value";
+		for (int i = 0; i < layer.size() - 1; i++) {
+			if (layer[i]->Layer_type == Layer::DENSE) {
+				static_cast<Dense*>(layer[i])->rand_weight(setting[i]);
+			}
+			else if (layer[i]->Layer_type == Layer::LSTM) {
+				static_cast<LSTM*>(layer[i])->rand_weight(setting[i]);
+			}
+			else if (layer[i]->Layer_type == Layer::DROPOUT) {
+				// dropout layer dont have weight
+			}
+		}
+	}
+
+	void rand_weight(const std::vector<std::function<double(std::size_t,std::size_t)>>& setting) {
+		if (setting.size() != layer.size() - 1)
+			throw "Invalid random weight value";
+		for (int i = 0; i < layer.size() - 1; i++) {
+			if (layer[i]->Layer_type == Layer::DENSE) {
+				static_cast<Dense*>(layer[i])->rand_weight(setting[i], layer[i + 1]->value.get_row());
+			}
+			else if (layer[i]->Layer_type == Layer::LSTM) {
+				static_cast<LSTM*>(layer[i])->rand_weight(setting[i], layer[i + 1]->value.get_row()); 
+			}
+			else if (layer[i]->Layer_type == Layer::DROPOUT) {
+				// dropout layer dont have weight
+			}
+		}
+	}
+
 	void rand_bias(const std::vector<std::pair<double,double>>& setting) {
 		if (setting.size() != layer.size() - 1)
 			throw "invalid random bias value";
@@ -63,8 +109,44 @@ public:
 			else if (layer[i]->Layer_type == Layer::LSTM) {
 				static_cast<LSTM*>(layer[i])->rand_bias(setting[i]);
 			}
+			else if (layer[i]->Layer_type == Layer::DROPOUT) {
+				// dropout layer dont have bias
+			}
 		}
 	}
+
+	void rand_bias(const std::vector<std::function<double()>>& setting) {
+		if (setting.size() != layer.size() - 1)
+			throw "invalid random bias value";
+		for (int i = 0; i < layer.size() - 1; i++) {
+			if (layer[i]->Layer_type == Layer::DENSE) {
+				static_cast<Dense*>(layer[i])->rand_bias(setting[i]);
+			}
+			else if (layer[i]->Layer_type == Layer::LSTM) {
+				static_cast<LSTM*>(layer[i])->rand_bias(setting[i]);
+			}
+			else if (layer[i]->Layer_type == Layer::DROPOUT) {
+				// dropout layer dont have bias
+			}
+		}
+	}
+
+	void rand_bias(const std::vector<std::function<double(std::size_t,std::size_t)>>& setting) {
+		if (setting.size() != layer.size() - 1)
+			throw "invalid random bias value";
+		for (int i = 0; i < layer.size() - 1; i++) {
+			if (layer[i]->Layer_type == Layer::DENSE) {
+				static_cast<Dense*>(layer[i])->rand_bias(setting[i], layer[i + 1]->value.get_row());
+			}
+			else if (layer[i]->Layer_type == Layer::LSTM) {
+				static_cast<LSTM*>(layer[i])->rand_bias(setting[i], layer[i + 1]->value.get_row());
+			}
+			else if (layer[i]->Layer_type == Layer::DROPOUT) {
+				// dropout layer dont have bias
+			}
+		}
+	}
+
 	void print_weight() {
 		std::cout << "======== weight ========\n";
 		for (int i = 0; i < layer.size() - 1; i++) {
@@ -72,6 +154,8 @@ public:
 				static_cast<Dense*>(layer[i])->print_weight();
 			else if (layer[i]->get_type() == Layer::LSTM)
 				static_cast<LSTM*>(layer[i])->print_weight();
+			else if (layer[i]->get_type() == Layer::DROPOUT)
+				std::cout << "Drop Out : " << static_cast<DropOut*>(layer[i])->get_drop_out_rate() << std::endl;
 		}
 	}
 	void print_value() {
@@ -81,6 +165,8 @@ public:
 				static_cast<Dense*>(layer[i])->print_value();
 			else if (layer[i]->get_type() == Layer::LSTM)
 				static_cast<LSTM*>(layer[i])->print_value();
+			else if (layer[i]->get_type() == Layer::DROPOUT)
+				static_cast<DropOut*>(layer[i])->print_value();
 		}
 	}
 	void print_bias() {
@@ -90,6 +176,8 @@ public:
 				static_cast<Dense*>(layer[i])->print_bias();
 			else if (layer[i]->get_type() == Layer::LSTM)
 				static_cast<LSTM*>(layer[i])->print_bias();
+			else if (layer[i]->get_type() == Layer::DROPOUT)
+				std::cout << "Drop Out : " << static_cast<DropOut*>(layer[i])->get_drop_out_rate() << std::endl;
 		}
 	}
 	std::size_t get_layer_size() {
@@ -129,6 +217,8 @@ public:
 				static_cast<Dense*>(layer[i])->change_dependencies();
 			else if (layer[i]->get_type() == Layer::LSTM)
 				static_cast<LSTM*>(layer[i])->change_dependencies();
+			else if (layer[i]->get_type() == Layer::DROPOUT)
+				;
 		}
 	}
 	void set_change_dependencies(const double& number) {
@@ -137,6 +227,18 @@ public:
 				static_cast<Dense*>(layer[i])->set_change_dependencies(number);
 			else if (layer[i]->get_type() == Layer::LSTM)
 				static_cast<LSTM*>(layer[i])->set_change_dependencies(number);
+			else if (layer[i]->get_type() == Layer::DROPOUT)
+				;
+		}
+	}
+	void mul_change_dependencies(const double& number) {
+		for (int i = 0; i < layer.size() - 1; i++) {
+			if (layer[i]->get_type() == Layer::DENSE)
+				static_cast<Dense*>(layer[i])->mul_change_dependencies(number);
+			else if (layer[i]->get_type() == Layer::LSTM)
+				static_cast<LSTM*>(layer[i])->mul_change_dependencies(number);
+			else if (layer[i]->get_type() == Layer::DROPOUT)
+				;
 		}
 	}
 	void set_all_learning_rate(const double& number) {
@@ -144,8 +246,17 @@ public:
 			layer[i]->set_learning_rate(number);
 		}
 	}
+	void set_all_drop_out_rate(const double& number) {
+		for (int i = 0; i < layer.size(); i++) {
+			if (layer[i]->get_type() == Layer::DROPOUT)
+				static_cast<DropOut*>(layer[i])->set_drop_out_rate(number);
+		}
+	}
 	Matrix<double> get_output() {
 		return layer.back()->value;
+	}
+	std::size_t get_input_size() {
+		return layer[0]->get_size();
 	}
 private:
 	std::vector<Layer*> layer;

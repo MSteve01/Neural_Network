@@ -5,6 +5,8 @@
 
 extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> dsigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
+extern std::function<Matrix<double>(const Matrix<double>&)> dlinear_func;
 double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
 void set_Matrix(Matrix<double>& M, double value);
 
@@ -98,6 +100,10 @@ public:
 		set_Matrix(weight_change, value);
 		set_Matrix(bias_change, value);
 	}
+	void mul_change_dependencies(const double& value) {
+		weight_change = weight_change * value;
+		bias_change = bias_change * value;
+	}
 	void reconstruct(const std::size_t& size, const std::size_t& next,
 		std::function<Matrix<double>(const Matrix<double>&)> _act_func = sigmoid_func,
 		std::function<Matrix<double>(const Matrix<double>&)> _dact_func = dsigmoid_func) {
@@ -126,7 +132,25 @@ public:
 			}
 		}
 	}
-	void rand_bais(const double& min, const double& max) {
+	void rand_weight(std::function<double()> func) {
+		if (!weight.is_constructed())
+			throw "cant set undefined weight value";
+		for (int i = 0; i < weight.get_row(); i++) {
+			for (int j = 0; j < weight.get_column(); j++) {
+				weight[i][j] = func();
+			}
+		}
+	}
+	void rand_weight(std::function<double(std::size_t,std::size_t)> func,std::size_t next) {
+		if (!weight.is_constructed())
+			throw "cant set undefined weight value";
+		for (int i = 0; i < weight.get_row(); i++) {
+			for (int j = 0; j < weight.get_column(); j++) {
+				weight[i][j] = func(value.get_row(), next);
+			}
+		}
+	}
+	void rand_bias(const double& min, const double& max) {
 		if (!bias.is_constructed())
 			throw "cant set undefined bias value";
 		for (int i = 0; i < bias.get_row(); i++) {
@@ -138,6 +162,20 @@ public:
 			throw "cant set undefined bias value";
 		for (int i = 0; i < bias.get_row(); i++) {
 			bias[i][0] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+		}
+	}
+	void rand_bias(std::function<double()> func) {
+		if (!bias.is_constructed())
+			throw "cant set undefined bias value";
+		for (int i = 0; i < bias.get_row(); i++) {
+			bias[i][0] = func();
+		}
+	}
+	void rand_bias(std::function<double(std::size_t,std::size_t)> func,std::size_t next) {
+		if (!bias.is_constructed())
+			throw "cant set undefined bias value";
+		for (int i = 0; i < bias.get_row(); i++) {
+			bias[i][0] = func(value.get_row(), next);
 		}
 	}
 	void print_weight() {

@@ -86,10 +86,19 @@ public:
 		return result;
 	}
 	Matrix<t> operator*(const double& rhs) {
-		Matrix result(row, column);
+		Matrix<t> result(row, column);
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < column; j++) {
 				result[i][j] = value[i][j] * rhs;
+			}
+		}
+		return result;
+	}
+	Matrix<t> operator/(const double& rhs) {
+		Matrix<t> result(row, column);
+		for (int i = 0; i < row; i++) {
+			for (int j = 0; j < column; j++) {
+				result[i][j] = value[i][j] / rhs;
 			}
 		}
 		return result;

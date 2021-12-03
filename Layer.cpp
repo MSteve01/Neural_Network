@@ -45,7 +45,6 @@ public:
 		return value = rhs;
 	}
 	
-
 	virtual ~Layer() {}
 
 protected:

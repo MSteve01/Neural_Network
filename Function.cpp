@@ -9,6 +9,8 @@ std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func = [](const Mat
 			result[i][j] = double(1) / (double(1) + std::exp(-input[i][j]));
 			if (result[i][j] != result[i][j]) {
 				result[i][j] = 0.000001;
+				//std::cout << -input[i][j] << std::endl;
+				//std::cin.get();
 			}
 		}
 	}
@@ -32,6 +34,10 @@ std::function<Matrix<double>(const Matrix<double>&)> tanh_func = [](const Matrix
 	for (int i = 0; i < input.get_row(); i++) {
 		for (int j = 0; j < input.get_column(); j++) {
 			result[i][j] = std::tanh(input[i][j]);
+			if (result[i][j] != result[i][j]) {
+				//std::cout << "tanh : " << input[i][j] << std::endl;
+				//std::cin.get();
+			}
 		}
 	}
 	return result;
@@ -42,6 +48,23 @@ std::function<Matrix<double>(const Matrix<double>&)> dtanh_func = [](const Matri
 	for (int i = 0; i < input.get_row(); i++) {
 		for (int j = 0; j < input.get_column(); j++) {
 			result[i][j] = double(1) - std::pow(std::tanh(input[i][j]), 2.0);
+			if (result[i][j] != result[i][j]) {
+				result[i][j] = 0.0000001;
+			}
+		}
+	}
+	return result;
+};
+
+std::function<Matrix<double>(const Matrix<double>&)> linear_func = [](const Matrix<double>& input) {
+	return input;
+};
+
+std::function<Matrix<double>(const Matrix<double>&)> dlinear_func = [](const Matrix<double>& input) {
+	Matrix<double> result;
+	for (int i = 0; i < result.get_row(); i++) {
+		for (int j = 0; j < result.get_column(); j++) {
+			result[i][j] = 1;
 		}
 	}
 	return result;
@@ -69,4 +92,24 @@ void set_Matrix(Matrix<double>& M, double value) {
 			M[i][j] = value;
 		}
 	}
+}
+
+double get_max(const Matrix<double>& M) {
+	double max_value = M[0][0];
+	for (int i = 0; i < M.get_row(); i++) {
+		for (int j = 0; j < M.get_column(); j++) {
+			max_value = std::max(max_value, M[i][j]);
+		}
+	}
+	return max_value;
+}
+
+double get_min(const Matrix<double>& M) {
+	double min_value = M[0][0];
+	for (int i = 0; i < M.get_row(); i++) {
+		for (int j = 0; j < M.get_column(); j++) {
+			min_value = std::min(min_value, M[i][j]);
+		}
+	}
+	return min_value;
 }
