@@ -3,26 +3,30 @@
 #include "Layer.cpp"
 #include "LayerId.cpp"
 
+// import functions
 extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
 
+
+// declare functions
 double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
 void set_Matrix(Matrix<double>& M, double value);
+Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
 double get_max(const Matrix<double>& M);
 double get_min(const Matrix<double>& M);
 void universal_set_func(std::function<Matrix<double>(const Matrix<double>&)>& func, const std::string& setting, int& i);
 void universal_set_func(std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)>& func, const std::string& setting, int& i);
 std::string get_text(const std::string& str, int& i);
 double get_number(const std::string& str, int& i);
-Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
+
 
 class LSTM : public Layer {
 public:
 	LSTM() { Layer_type = Layer::LSTM; };
+
 	LSTM(const std::size_t& size,
 		std::function<Matrix<double>(const Matrix<double>&)> _Iact_func = tanh_func,
 		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dIact_func = dtanh_func,
@@ -36,8 +40,10 @@ public:
 		Fact_func(_Fact_func), dFact_func(_dFact_func), 
 		Oact_func(_Oact_func), dOact_func(_dOact_func),
 		Kact_func(_Kact_func), dKact_func(_dKact_func) {
-		value.reconstruct(size, 1);
+		
 		Layer_type = Layer::LSTM;
+
+		value.reconstruct(size, 1);
 
 		xO_weight.reconstruct(size, size);
 		xF_weight.reconstruct(size, size);
@@ -72,12 +78,14 @@ public:
 
 		init_c_change.reconstruct(size, 1);
 		init_h_change.reconstruct(size, 1);
+
 		set_Matrix(init_c, 0);
 		set_Matrix(init_h, 0);
 
 		c.push_back(init_c);
 		h.push_back(init_h);
 	}
+
 	LSTM(const LayerId& set) {
 		value.reconstruct(set.Layer_size, 1);
 		Layer_type = Layer::LSTM;
@@ -115,6 +123,7 @@ public:
 
 		init_c_change.reconstruct(set.Layer_size, 1);
 		init_h_change.reconstruct(set.Layer_size, 1);
+
 		set_Matrix(init_c, 0);
 		set_Matrix(init_h, 0);
 
@@ -134,60 +143,74 @@ public:
 		set_Layer(set.setting);
 	}
 
-	Matrix<double> feed() {
-		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);
-		Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);
-		Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h.back()) + Obias);
+
+		
+	Matrix<double> feed() {																						// feedforward
+		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);			// compute input gate
+		Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);			// compute forgot gate
+		Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h.back()) + Obias);			// compute output gate
 		Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h.back()) + Kbias);
 
-		c.push_back(mul_each(fogot_gate, c.back()) + mul_each(input_gate, K));
-		h.push_back(mul_each(output_gate, c.back()));
-		v.push_back(value);
+		c.push_back(mul_each(fogot_gate, c.back()) + mul_each(input_gate, K));									// compute and remember cell state
+		h.push_back(mul_each(output_gate, c.back()));															// compute and remember output fo the cell
+		v.push_back(value);																						// remember given input
 
-		return h.back();
+		return h.back();																						// return output
 	}
-	std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient) {
+
+	std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient) {						// backpropagation
 		if (gadient.size() > c.size())
 			throw "invalid gaadient  size for  backpropagatoin lstm";
 
-		Matrix<double> dc(value.get_row(), 1); 
-		set_Matrix(dc, 0);
-		Matrix<double> dh(value.get_row(), 1); 
-		set_Matrix(dh, 0);
-		Matrix<double> next_dc(value.get_row(), 1);
+		Matrix<double> dc(value.get_row(), 1);																	// containing error of cell state for each time step
+		Matrix<double> dh(value.get_row(), 1);																	// containing error of output for each time step
+
+		Matrix<double> next_dc(value.get_row(), 1);																// containing error of next time step
 		Matrix<double> next_dh(value.get_row(), 1);
+
+		set_Matrix(dc, 0);
+		set_Matrix(dh, 0);
+
 		std::vector<Matrix<double>> _gadient;
-		std::vector<Matrix<double>> flow_gadient; 
-		for (int i = 0; i < v.size(); i++) { flow_gadient.push_back(Matrix<double>(value.get_row(), 1)); set_Matrix(flow_gadient.back(), 0); }
+		std::vector<Matrix<double>> flow_gadient;
+
+
+
+		for (int i = 0; i < v.size(); i++) {																	// rearrange the gadient and put into _gadient
+			flow_gadient.push_back(Matrix<double>(value.get_row(), 1)); set_Matrix(flow_gadient.back(), 0); 
+		}
 
 		for (int i = 0; i + gadient.size() < v.size(); i++) {
 			_gadient.push_back(Matrix<double>(value.get_row(), 1));
 			set_Matrix(_gadient.back(),0);
 		}
+
 		for (int i = 0; i < gadient.size(); i++) {
 			_gadient.push_back(gadient[i]);
 		}
 
-		for (int round = v.size() - 1; round >= 0; round--) {
+
+
+		for (int round = v.size() - 1; round >= 0; round--) {													// loop thougj eery time step
 			set_Matrix(next_dc, 0);
 			set_Matrix(next_dh, 0);
 
-			Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias);
-			Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias);
-			Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h[round]) + Obias);
+			Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias);		// compute input gate
+			Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias);		// compute forgot gate
+			Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h[round]) + Obias);		// comput output gate
 			Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias);
 
-			dh = dh + _gadient[round];
-			dc = dc + mul_each(dh, output_gate);
+			dh = dh + _gadient[round];																			// add up output error
+			dc = dc + mul_each(dh, output_gate);																// add up cell state error
 
-			Matrix<double> dinput_gate = dIact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias, mul_each(dc, K));
-			Matrix<double> dfogot_gate = dFact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));
-			Matrix<double> doutput_gate = dOact_func((xO_weight * value) + (hO_weight * h[round]) + Obias, mul_each(dh, c[round + 1]));
+			Matrix<double> dinput_gate = dIact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias, mul_each(dc, K));// derivative of input gate
+			Matrix<double> dfogot_gate = dFact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));// derivative of forgot gate
+			Matrix<double> doutput_gate = dOact_func((xO_weight * value) + (hO_weight * h[round]) + Obias, mul_each(dh, c[round + 1]));// derivative of output
 			Matrix<double> dK = dKact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias, mul_each(dc, input_gate));
 
-			for (int i = 0; i < value.get_row(); i++) {
-				for (int j = 0; j < value.get_row(); j++) {
-					xO_weight_change[i][j] += doutput_gate[i][0] * v[round][j][0] * learning_rate;
+			for (int i = 0; i < value.get_row(); i++) {															// loop though every output row
+				for (int j = 0; j < value.get_row(); j++) {														// loop though every input row
+					xO_weight_change[i][j] += doutput_gate[i][0] * v[round][j][0] * learning_rate;				// comupute changing weight
 					hO_weight_change[i][j] += doutput_gate[i][0] * h[round][j][0] * learning_rate;
 					xI_weight_change[i][j] += dinput_gate[i][0] * v[round][j][0] * learning_rate;
 					hI_weight_change[i][j] += dinput_gate[i][0] * h[round][j][0] * learning_rate;
@@ -196,31 +219,31 @@ public:
 					xK_weight_change[i][j] += dK[i][0] * v[round][j][0] * learning_rate;
 					hK_weight_change[i][j] += dK[i][0] * h[round][j][0] * learning_rate;
 
-					next_dh[i][0] += doutput_gate[i][0] * hO_weight_change[i][j];
+					next_dh[i][0] += doutput_gate[i][0] * hO_weight_change[i][j];								// comupute next time step output error
 					next_dh[i][0] += dinput_gate[i][0] * hI_weight_change[i][j];
 					next_dh[i][0] += dfogot_gate[i][0] * hF_weight_change[i][j];
 					next_dh[i][0] += dK[i][0] * hK_weight_change[i][j];
 
-					flow_gadient[round][i][0] += doutput_gate[i][0] * xO_weight_change[i][j];
+					flow_gadient[round][i][0] += doutput_gate[i][0] * xO_weight_change[i][j];					// computer flow gadient
 					flow_gadient[round][i][0] += dinput_gate[i][0] * xI_weight_change[i][j];
 					flow_gadient[round][i][0] += dfogot_gate[i][0] * xF_weight_change[i][j];
 					flow_gadient[round][i][0] += dK[i][0] * hK_weight_change[i][j];
 				
 				}
-				Obias_change[i][0] += doutput_gate[i][0] * learning_rate;
+				Obias_change[i][0] += doutput_gate[i][0] * learning_rate;										// compute changing bias
 				Ibias_change[i][0] += dinput_gate[i][0] * learning_rate;
 				Fbias_change[i][0] += dfogot_gate[i][0] * learning_rate;
 				Kbias_change[i][0] += dK[i][0] * learning_rate;
 
 			}
 
-			next_dc = mul_each(dc, fogot_gate);
+			next_dc = mul_each(dc, fogot_gate);																	// compute next time step cell state error
 
-			dh = next_dh;
+			dh = next_dh;																						
 			dc = next_dc;
 			
 			// try to descale exploding gadient
-			double max_dh_value = std::max(get_max(dh), std::abs(get_min(dh)));
+			double max_dh_value = std::max(get_max(dh), std::abs(get_min(dh)));									
 			double max_dc_value = std::max(get_max(dc), std::abs(get_min(dc)));
 			
 			double flow_cap = std::sqrt(double(2) / v.size());
@@ -228,7 +251,7 @@ public:
 			if (max_dc_value > flow_cap) dc = dc * (flow_cap / max_dc_value);
 		}
 
-		for (int i = 0; i < value.get_row(); i++) {
+		for (int i = 0; i < value.get_row(); i++) {																// compute initial cell state
 			init_h_change[i][0] += dh[i][0] * learning_rate;
 			init_c_change[i][0] += dc[i][0] * learning_rate;
 		}
@@ -236,6 +259,8 @@ public:
 		return flow_gadient;
 	}
 	
+
+
 	void fogot(const std::size_t& number) {
 		std::size_t _number = number;
 		if (number > v.size())
@@ -255,9 +280,13 @@ public:
 			h.push_back(init_h);
 		}
 	}
+
 	void fogot_all() {
 		fogot(v.size());
 	}
+
+
+
 	void change_dependencies() {
 		xO_weight = xO_weight_change + xO_weight;
 		xF_weight = xF_weight_change + xF_weight;
@@ -276,6 +305,7 @@ public:
 		init_c = init_c + init_c_change;
 		init_h = init_h + init_h_change;
 	}
+
 	void set_change_dependencies(const double& number) {
 		set_Matrix(xO_weight_change,number);
 		set_Matrix(xF_weight_change,number);
@@ -313,6 +343,8 @@ public:
 		init_c_change = init_c_change * number;
 		init_h_change = init_h_change * number;
 	}
+
+
 
 	void reconstruct(const std::size_t& size, const std::size_t& next,
 		std::function<Matrix<double>(const Matrix<double>&)> _Iact_func = tanh_func,
@@ -371,6 +403,7 @@ public:
 		c.push_back(init_c);
 		h.push_back(init_h);
 	}
+
 	void reconstruct(const LayerId& set) {
 		value.reconstruct(set.Layer_size, 1);
 		Layer_type = Layer::LSTM;
@@ -426,6 +459,8 @@ public:
 
 		set_Layer(set.setting);
 	}
+
+
 
 	void rand_weight(const double& min,const double& max) {
 		for (int i = 0; i < value.get_row(); i++) {
@@ -527,15 +562,20 @@ public:
 		}
 	}
 
+
+
 	std::function<Matrix<double>(const Matrix<double>&)> get_Oact_func() {
 		return Oact_func;
 	}
+
 	std::function<Matrix<double>(const Matrix<double>&)> get_Fact_func() {
 		return Fact_func;
 	}
+
 	std::function<Matrix<double>(const Matrix<double>&)> get_Iact_func() {
 		return Iact_func;
 	}
+
 	std::function<Matrix<double>(const Matrix<double>&)> get_Kact_func() {
 		return Kact_func;
 	}
@@ -543,15 +583,21 @@ public:
 	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dOact_func() {
 		return dOact_func;
 	}
+
 	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dFact_func() {
 		return dFact_func;
 	}
+
 	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dIact_func() {
 		return dIact_func;
 	}
+
 	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dKact_func() {
 		return dKact_func;
 	}
+
+
+
 	void print_weight() {
 		std::cout << "--------------LSTM Layer----------\n\n";
 		print_xI_weight(); std::cout << std::endl;
@@ -563,6 +609,7 @@ public:
 		print_hK_weight(); std::cout << std::endl;
 		print_hO_weight(); std::cout << std::endl;	
 	}
+
 	void print_bias() {
 		std::cout << "--------------LSTM Layer----------\n\n";
 		print_Ibias(); std::cout << std::endl;
@@ -572,6 +619,7 @@ public:
 
 		print_init();
 	}
+
 	void print_value() {
 		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);
 		Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);
@@ -609,6 +657,7 @@ protected:
 			std::cout << std::endl;
 		}
 	}
+
 	void print_xF_weight() {
 		std::cout << "  -----x-fogot weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
@@ -618,6 +667,7 @@ protected:
 			std::cout << std::endl;
 		}
 	}
+
 	void print_xI_weight() {
 		std::cout << "  -----x-input weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
@@ -627,6 +677,7 @@ protected:
 			std::cout << std::endl;
 		}
 	}
+
 	void print_xK_weight() {
 		std::cout << "  -----x-k    weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
@@ -636,6 +687,7 @@ protected:
 			std::cout << std::endl;
 		}
 	}
+
 	void print_hO_weight() {
 		std::cout << "  -----h-output weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
@@ -645,6 +697,7 @@ protected:
 			std::cout << std::endl;
 		}
 	}
+
 	void print_hF_weight() {
 		std::cout << "  -----h-fogot weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
@@ -654,6 +707,7 @@ protected:
 			std::cout << std::endl;
 		}
 	}
+
 	void print_hI_weight() {
 		std::cout << "  -----h-input weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
@@ -663,6 +717,7 @@ protected:
 			std::cout << std::endl;
 		}
 	}
+
 	void print_hK_weight() {
 		std::cout << "  -----h-K     weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
@@ -679,24 +734,28 @@ protected:
 			std::cout << Obias[i][0] << "    \t";
 		}std::cout << std::endl;
 	}
+
 	void print_Fbias() {
 		std::cout << "   ---fogot bias------\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			std::cout << Fbias[i][0] << "    \t";
 		}std::cout << std::endl;
 	}
+
 	void print_Ibias() {
 		std::cout << "   ---input bias------\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			std::cout << Ibias[i][0] << "    \t";
 		}std::cout << std::endl;
 	}
+
 	void print_Kbias() {
 		std::cout << "   ---K     bias------\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			std::cout << Kbias[i][0] << "    \t";
 		}std::cout << std::endl;
 	}
+
 	void print_init() {
 		std::cout << " -------- init----------\n";
 		for (int i = 0; i < init_c.get_row(); i++) {
@@ -711,6 +770,8 @@ protected:
 			}std::cout << std::endl;
 		}
 	}
+
+
 
 	void set_Layer(const std::string& setting) {
 		int size = setting.size();
@@ -741,54 +802,57 @@ protected:
 			else throw "command not found";
 		}
 	}
+
 	void set_learning_rate(const std::string& str, int& i) {
 		double a = get_number(str, i);
 		learning_rate = a;
 	}
-	Matrix<double> xO_weight;
-	Matrix<double> xF_weight;
-	Matrix<double> xI_weight;
-	Matrix<double> xK_weight;
-	Matrix<double> hO_weight;
-	Matrix<double> hF_weight;
-	Matrix<double> hI_weight;
-	Matrix<double> hK_weight;
 
-	Matrix<double> Obias;
-	Matrix<double> Fbias;
-	Matrix<double> Ibias;
-	Matrix<double> Kbias;
 
-	Matrix<double> xO_weight_change;
-	Matrix<double> xF_weight_change;
-	Matrix<double> xI_weight_change;
-	Matrix<double> xK_weight_change;
-	Matrix<double> hO_weight_change;
-	Matrix<double> hF_weight_change;
-	Matrix<double> hI_weight_change;
-	Matrix<double> hK_weight_change;
+	Matrix<double> xO_weight;																				// weight for input -> output gate
+	Matrix<double> xF_weight;																				// weight for input -> forgot gate
+	Matrix<double> xI_weight;																				// weight for input -> input gate
+	Matrix<double> xK_weight;																				// weight for input -> K
+	Matrix<double> hO_weight;																				// weight for hidden -> output gate
+	Matrix<double> hF_weight;																				// weight for hidden -> forgot gate
+	Matrix<double> hI_weight;																				// weight for hidden -> input gate
+	Matrix<double> hK_weight;																				// weight for hidden -> K
+
+	Matrix<double> Obias;																					// bias for output gate
+	Matrix<double> Fbias;																					// bias for forgot gate	
+	Matrix<double> Ibias;																					// bias for input gate
+	Matrix<double> Kbias;																					// bias for K
+
+	Matrix<double> init_c;																					// initial cell state
+	Matrix<double> init_h;																					// initial hidden
+
+	Matrix<double> xO_weight_change;																		// changing weight for input -> output gate
+	Matrix<double> xF_weight_change;																		// changing weight for input -> forgot gate
+	Matrix<double> xI_weight_change;																		// changing weight for input -> input gate
+	Matrix<double> xK_weight_change;																		// changing weight for input -> K
+	Matrix<double> hO_weight_change;																		// changing hidden for input -> output gate
+	Matrix<double> hF_weight_change;																		// changing hidden for input -> forgot gate
+	Matrix<double> hI_weight_change;																		// changing hidden for input -> input gate
+	Matrix<double> hK_weight_change;																		// changing hidden for input -> K
+
+	Matrix<double> Obias_change;																			// changing bias for output gate																	
+	Matrix<double> Fbias_change;																			// changing bias for forgot gate
+	Matrix<double> Ibias_change;																			// changing bias for input gate
+	Matrix<double> Kbias_change;																			// changing bias for K
+
+	Matrix<double> init_c_change;																			// changing initial cell state
+	Matrix<double> init_h_change;																			// changing initial hidden
 	
-	Matrix<double> init_c;
-	Matrix<double> init_h;
+	std::vector<Matrix<double>> c;																			// cell state memory
+	std::vector<Matrix<double>> h;																			// output memory
 
-	Matrix<double> Obias_change;
-	Matrix<double> Fbias_change;
-	Matrix<double> Ibias_change;
-	Matrix<double> Kbias_change;
+	std::function<Matrix<double>(const Matrix<double>&)> Oact_func = sigmoid_func;							// activate function for output gate
+	std::function<Matrix<double>(const Matrix<double>&)> Fact_func = sigmoid_func;							// activate function for forgot gate
+	std::function<Matrix<double>(const Matrix<double>&)> Iact_func = tanh_func;								// activate function for input gate
+	std::function<Matrix<double>(const Matrix<double>&)> Kact_func = tanh_func;								// activate function for K
 
-	Matrix<double> init_c_change;
-	Matrix<double> init_h_change;
-	
-	std::vector<Matrix<double>> c;
-	std::vector<Matrix<double>> h;
-
-	std::function<Matrix<double>(const Matrix<double>&)> Oact_func = sigmoid_func;
-	std::function<Matrix<double>(const Matrix<double>&)> Fact_func = sigmoid_func;
-	std::function<Matrix<double>(const Matrix<double>&)> Iact_func = tanh_func;
-	std::function<Matrix<double>(const Matrix<double>&)> Kact_func = tanh_func;
-
-	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dOact_func = dsigmoid_func;
-	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dFact_func = dsigmoid_func;
-	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dIact_func = dtanh_func;
-	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dKact_func = dtanh_func;
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dOact_func = dsigmoid_func;	// derivative of activate function for output gate
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dFact_func = dsigmoid_func;	// derivative of activate function for forgot gate
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dIact_func = dtanh_func;	// derivative of activate function for input gate
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dKact_func = dtanh_func;	// derivative of activate function for K
 };

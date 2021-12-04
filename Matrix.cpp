@@ -6,9 +6,11 @@ template<typename t>
 class Matrix {
 public:
 	Matrix() {};
+
 	Matrix(const std::size_t& _row, const std::size_t& _column) : row(_row), column(_column) {
 		declare();
 	}
+
 	Matrix(std::vector<std::vector<t>> _value) : row(_value.size()) , column(_value[0].size()) {
 		declare();
 
@@ -22,6 +24,7 @@ public:
 			}
 		}
 	}
+
 	Matrix(const Matrix& copy) : row(copy.row) , column(copy.column) {
 		declare();
 
@@ -31,12 +34,15 @@ public:
 			}
 		}
 	}
+
 	~Matrix() {
 		for (int i = 0; i < row; i++) {
 			delete value[i];
 		}
 		delete[] value;
 	}
+
+
 
 	Matrix<t>& operator=(const Matrix<t>& rhs) {
 		destroy();
@@ -49,6 +55,7 @@ public:
 		}
 		return (*this);
 	}
+
 	Matrix<t> operator*(const Matrix<t>& rhs) {
 		if (column != rhs.row)
 			throw "illegal Matrix multification(lhs.column != rhs.row)";
@@ -64,6 +71,17 @@ public:
 		}
 		return result;
 	}
+
+	Matrix<t> operator*(const double& rhs) {
+		Matrix<t> result(row, column);
+		for (int i = 0; i < row; i++) {
+			for (int j = 0; j < column; j++) {
+				result[i][j] = value[i][j] * rhs;
+			}
+		}
+		return result;
+	}
+
 	Matrix<t> operator+(const Matrix<t>& rhs) {
 		if (row != rhs.row || column != rhs.column) {
 			throw "Illegal Matrix sumasion(size are not equal)";
@@ -76,6 +94,7 @@ public:
 		}
 		return result;
 	}
+
 	Matrix<t> operator-(const Matrix<t>& rhs) {
 		Matrix<double> result(row, column);
 		for (int i = 0; i < row; i++) {
@@ -85,15 +104,7 @@ public:
 		}
 		return result;
 	}
-	Matrix<t> operator*(const double& rhs) {
-		Matrix<t> result(row, column);
-		for (int i = 0; i < row; i++) {
-			for (int j = 0; j < column; j++) {
-				result[i][j] = value[i][j] * rhs;
-			}
-		}
-		return result;
-	}
+
 	Matrix<t> operator/(const double& rhs) {
 		Matrix<t> result(row, column);
 		for (int i = 0; i < row; i++) {
@@ -103,9 +114,13 @@ public:
 		}
 		return result;
 	}
+
+
+
 	t*& operator[](const std::size_t& pos) {
 		return value[pos];
 	}
+
 	const t* operator[](const std::size_t& pos) const {
 		return value[pos];
 	}
@@ -118,12 +133,22 @@ public:
 			std::cout << std::endl;
 		}
 	}
+
+
+
 	void reconstruct(const std::size_t& _row, const std::size_t& _column) {
 		destroy();
 		declare(_row, _column);
 	}
+
+
+	
 	std::size_t get_row() const { return row; }
+
 	std::size_t get_column() const { return column; }
+
+
+	
 	bool is_constructed() const  {
 		return value != nullptr;
 	}
@@ -139,6 +164,7 @@ private:
 		column = NULL;
 		value = nullptr;
 	}
+
 	void declare() {
 		if (row == NULL || column == NULL)
 			throw "undefine Matrix cant been declared";
@@ -147,11 +173,13 @@ private:
 			value[i] = new t[column];
 		}
 	}
+
 	void declare(const std::size_t& _row, const std::size_t& _column) {
 		row = _row;
 		column = _column;
 		declare();
 	}
+
 	std::size_t row = NULL;
 	std::size_t column = NULL;
 	t** value = nullptr;

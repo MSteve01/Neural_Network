@@ -3,56 +3,77 @@
 #include "Layer.cpp"
 #include "LayerId.cpp"
 
+// import functions
 extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
 extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
 extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
 extern std::function<double()> normal_rand_func;
+
+
+// declare functions
 double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
 void set_Matrix(Matrix<double>& M, double value);
+Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
 std::string get_text(const std::string& str, int& i);
 double get_number(const std::string& str, int& i);
-Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
+
+
 
 class DropOut : public Layer {
 public:
 	DropOut () { ; };
+
 	DropOut(const std::size_t& size,
 		std::function<double()> _rand_func = []() {return double(rand() % 10000) / 10000; }) {
 		Layer_type = DROPOUT;
+
 		value.reconstruct(size, 1);
+
 		rand_func = _rand_func;
 	}
+
 	DropOut(const LayerId& set) {
 		Layer_type = DROPOUT;
+
 		value.reconstruct(set.Layer_size, 1);
+
 		rand_func = []() {return double(rand() & 10000) / 10000; };
 		set_layer(set.setting);
 	}
-	Matrix<double> feed() {
-		Matrix<double> filter(value.get_row(),1);
+
+	Matrix<double> feed() {																						// feedforward
+		Matrix<double> filter(value.get_row(),1);																// create Matrix containing filter				
+
 		for (int i = 0; i < value.get_row(); i++) {
-			filter[i][0] = rand_func() < drop_out_rate ? 0 : 1;
+			filter[i][0] = rand_func() < drop_out_rate ? 0 : 1;													// randomly put 0 or 1 into filter
 		}
-		v.push_back(filter);
-		return mul_each(value,filter);
+		v.push_back(filter);																					// remember the filter
+		return mul_each(value,filter);																			// return Matrix for each value[i][j] if filter[i][j] = 1, otherwise 0
 	}
-	std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient) {
-		int start_pos = v.size() - gadient.size();
-		std::vector<Matrix<double>> result;
-		for (int i = 0; i < gadient.size(); i++) {
+
+	std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient) {						// backpropagation
+		std::vector<Matrix<double>> result;																		// the output of this function(flow gadient)
+		
+		int start_pos = v.size() - gadient.size();																// rearrange in case givven gadient is shorter than layer's memory
+
+		for (int i = 0; i < gadient.size(); i++) {																// loop though every time step
 			result.push_back(Matrix<double>(gadient[i].get_row(),1));
-			for (int j = 0; j < gadient[i].get_row(); j++) {
+
+			for (int j = 0; j < gadient[i].get_row(); j++) {													// loop though every gadient
 				for (int k = 0; k < gadient[i].get_column(); k++) {
-					result[i][j][k] = gadient[i][j][k] * v[start_pos + i][j][k];
+					result[i][j][k] = gadient[i][j][k] * v[start_pos + i][j][k];								// compute flow gadient
 				}
 			}
 		}
 		return result;
 	}
-	void fogot(const std::size_t& number) {
+
+
+
+	void fogot(const std::size_t& number) {																		// delete old memory and shift the new memory
 		int h = number;
 		if (number > v.size())
 			h = v.size();
@@ -63,30 +84,54 @@ public:
 			v.pop_back();
 		}
 	}
-	void fogot_all() {
+
+	void fogot_all() {																							// delete all memory
 		fogot(v.size());
 	}
+
+
+
 	void change_dependencies() {
 		
 	}
+
 	void set_change_dependencies(const double& number) {
 
 	}
+
 	void mul_change_dependencies(const double& number) {
 
 	}
-	void reconstruct(const std::size_t& size, std::function<double()> _rand_func = []() {return double(rand() % 10000) / 10000; }) {
-		value.reconstruct(size, 1);
-		rand_func = _rand_func;
 
-		fogot_all();
+	void set_drop_out_rate(const double& number) {
+		drop_out_rate = number;
 	}
+
+	void set_rand_func(std::function<double()> _rand_func) {
+		rand_func = _rand_func;
+	}
+
+
+
+	void reconstruct(const std::size_t& size, std::function<double()> _rand_func = []() {return double(rand() % 10000) / 10000; }) {
+		fogot_all();
+		
+		value.reconstruct(size, 1);
+
+		rand_func = _rand_func;
+	}
+
 	void reconstruct(const LayerId& set) {
 		Layer_type = DROPOUT;
+
 		value.reconstruct(set.Layer_size, 1);
+
 		rand_func = []() {return double(rand() & 10000) / 10000; };
 		set_layer(set.setting);
 	}
+
+
+
 	void rand_weight(const double& min, const double& max) {
 		
 	}
@@ -119,26 +164,27 @@ public:
 		
 	}
 
-	void set_drop_out_rate(const double& number) {
-		drop_out_rate = number;
-	}
-	void set_rand_func(std::function<double()> _rand_func) {
-		rand_func = _rand_func;
-	}
-	std::function<double()> get_rand_func() {
-		return rand_func;
-	}
-	double get_drop_out_rate() {
-		return drop_out_rate;
-	}
+
+
 	void print_value() {
 		std::cout << "---------DropOut Layer----------\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			std::cout << value[i][0] << "    \t";
 		}std::cout << std::endl;
 	}
+
+
+
+	std::function<double()> get_rand_func() {
+		return rand_func;
+	}
+
+	double get_drop_out_rate() {
+		return drop_out_rate;
+	}
+
 private:
-	void set_layer(const std::string& setting) {
+	void set_layer(const std::string& setting) {															// set the layer using command
 		int size = setting.size();
 		int i = 0;
 		while (i < size) {
@@ -152,16 +198,21 @@ private:
 			else throw "command not found";
 		}
 	}
-	void set_rand_func(const std::string& str, int& i) {
+
+	void set_rand_func(const std::string& str, int& i) {													// set rand function usnig command
 		std::string a = get_text(str, i);
 		if (a == "normal")
 			rand_func = normal_rand_func;
 		else throw "function not found";
 	}
-	void set_drop_out_rate(const std::string& str, int& i) {
+
+	void set_drop_out_rate(const std::string& str, int& i) {												// set drop out rate using command
 		double a = get_number(str, i);
 		drop_out_rate = a;
 	}
-	std::function<double()> rand_func;
-	double drop_out_rate = 0.1;
+
+
+
+	std::function<double()> rand_func;																		// containing random function
+	double drop_out_rate = 0.1;																				// dropout rate = ( 0 , 1 )
 };

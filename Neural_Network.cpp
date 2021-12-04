@@ -10,11 +10,14 @@
 class Neural_Network {
 public:
 	Neural_Network() {}
+
 	Neural_Network(std::vector<LayerId> _layer,
 		std::function<double(const Matrix<double>&, const Matrix<double>&)> _loss_func,
 		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dloss_func) :
 		loss_func(_loss_func), dloss_func(_dloss_func) {
+
 		std::size_t _Layer_size = _layer.size();
+
 		for (int i = 0; i < _Layer_size - 1; i++) {
 			if (_layer[i].Layer_type == Layer::type::DENSE) {
 				layer.push_back(new Dense(_layer[i],_layer[i + 1].Layer_size));
@@ -39,7 +42,8 @@ public:
 			throw "the output layer must be Dense layer";
 		layer.push_back(new Dense(_layer[_Layer_size - 1].Layer_size));
 	}
-	Neural_Network(const Neural_Network& copy) { // do not use, not finish
+
+	Neural_Network(const Neural_Network& copy) { // do not use, not finish dont use it
 		for (int i = 0; i < copy.layer.size() - 1; i++) {
 			if (copy.layer[i]->get_type() == Layer::DENSE) {
 				Dense* _layer = static_cast<Dense*>(copy.layer[i]);
@@ -63,9 +67,12 @@ public:
 		layer.push_back(new Dense(copy.layer.back()->get_size()));
 	}
 
+
+
 	void rand_weight(const std::vector<std::pair<double, double>>& setting) {
 		if (setting.size() != layer.size() - 1)
 			throw "Invalid random weight value";
+
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->Layer_type == Layer::DENSE) {
 				static_cast<Dense*>(layer[i])->rand_weight(setting[i]);
@@ -74,10 +81,10 @@ public:
 				static_cast<LSTM*>(layer[i])->rand_weight(setting[i]);
 			}
 			else if (layer[i]->Layer_type == Layer::DROPOUT) {
-				// drop out layer dotn have weight
+				;// drop out layer dotn have weight
 			}
 			else if (layer[i]->Layer_type == Layer::FILTER) {
-				// Filter layer dont have weight
+				;// Filter layer dont have weight
 			}
 		}
 	}
@@ -85,6 +92,7 @@ public:
 	void rand_weight(const std::vector<std::function<double()>>& setting) {
 		if (setting.size() != layer.size() - 1)
 			throw "Invalid random weight value";
+
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->Layer_type == Layer::DENSE) {
 				static_cast<Dense*>(layer[i])->rand_weight(setting[i]);
@@ -93,10 +101,10 @@ public:
 				static_cast<LSTM*>(layer[i])->rand_weight(setting[i]);
 			}
 			else if (layer[i]->Layer_type == Layer::DROPOUT) {
-				// dropout layer dont have weight
+				;// dropout layer dont have weight
 			}
 			else if (layer[i]->Layer_type == Layer::FILTER) {
-				// Filter layer dont have weight
+				;// Filter layer dont have weight
 			}
 		}
 	}
@@ -112,10 +120,10 @@ public:
 				static_cast<LSTM*>(layer[i])->rand_weight(setting[i], layer[i + 1]->value.get_row());
 			}
 			else if (layer[i]->Layer_type == Layer::DROPOUT) {
-				// dropout layer dont have weight
+				;// dropout layer dont have weight
 			}
 			else if (layer[i]->Layer_type == Layer::FILTER) {
-				// Filter layer dont have weight
+				;// Filter layer dont have weight
 			}
 		}
 	}
@@ -131,10 +139,10 @@ public:
 				static_cast<LSTM*>(layer[i])->rand_bias(setting[i]);
 			}
 			else if (layer[i]->Layer_type == Layer::DROPOUT) {
-				// dropout layer dont have bias
+				;// dropout layer dont have bias
 			}
 			else if (layer[i]->Layer_type == Layer::FILTER) {
-				// Filter layer dont have weight
+				;// Filter layer dont have weight
 			}
 		}
 	}
@@ -150,10 +158,10 @@ public:
 				static_cast<LSTM*>(layer[i])->rand_bias(setting[i]);
 			}
 			else if (layer[i]->Layer_type == Layer::DROPOUT) {
-				// dropout layer dont have bias
+				;// dropout layer dont have bias
 			}
 			else if (layer[i]->Layer_type == Layer::FILTER) {
-				// Filter layer dont have weight
+				;// Filter layer dont have weight
 			}
 		}
 	}
@@ -169,13 +177,15 @@ public:
 				static_cast<LSTM*>(layer[i])->rand_bias(setting[i], layer[i + 1]->value.get_row());
 			}
 			else if (layer[i]->Layer_type == Layer::DROPOUT) {
-				// dropout layer dont have bias
+				;// dropout layer dont have bias
 			}
 			else if (layer[i]->Layer_type == Layer::FILTER) {
-				// Filter layer dont have weight
+				;// Filter layer dont have weight
 			}
 		}
 	}
+
+
 
 	void print_weight() {
 		std::cout << "======== weight ========\n";
@@ -190,6 +200,7 @@ public:
 				std::cout << "Filter layer\n";
 		}
 	}
+
 	void print_value() {
 		std::cout << "======== value =========\n";
 		for (int i = 0; i < layer.size(); i++) {
@@ -203,6 +214,7 @@ public:
 				static_cast<Filter*>(layer[i])->print_value();
 		}
 	}
+
 	void print_bias() {
 		std::cout << "========= bias ==========\n";
 		for (int i = 0; i < layer.size() - 1; i++) {
@@ -216,27 +228,35 @@ public:
 				std::cout << "Filter layer\n";
 		}
 	}
-	std::size_t get_layer_size() {
-		return layer.size();
-	}
-	Matrix<double> feedforward(Matrix<double> input) {
+
+
+
+	Matrix<double> feedforward(Matrix<double> input) { 
 		if (input.get_row() != layer[0]->get_size() || input.get_column() != 1)
 			throw "invalid input Matrix";
-		layer[0]->set_value(input);
-		for (int i = 1; i < layer.size(); i++) {
-			layer[i]->set_value(layer[i - 1]->feed());
+
+		layer[0]->set_value(input);																			// set input into the first layer
+
+		for (int i = 1; i < layer.size(); i++) {															// loop though every layer
+			layer[i]->set_value(layer[i - 1]->feed());														// get output from previous layer then set into the next layer
 		}
-		return static_cast<Dense*>(layer.back())->get_value();
+		return static_cast<Dense*>(layer.back())->get_value();												// get output from last layer
 	}
+
 	void backpropagation(Matrix<double> target) {
-		Matrix<double> output = static_cast<Dense*>(layer.back())->get_value();
+		Matrix<double> output = static_cast<Dense*>(layer.back())->get_value();								// get output form last layer
+
 		std::vector<Matrix<double>> error;
-		error.push_back(dloss_func(output, target));
-		for (int i = layer.size() - 2; i >= 0; i--) {
-			error = layer[i]->propagation(error);
+		error.push_back(dloss_func(output, target));														// compute the gadient from output and target value
+
+		for (int i = layer.size() - 2; i >= 0; i--) {														// loop though every layer (from the back)
+			error = layer[i]->propagation(error);															// get gadient flow from back layer and set into vector error
 		}
 	}
-	void fogot(const std::size_t& number) {
+
+
+
+	void fogot(const std::size_t& number) {																	// delete the past value memory
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->get_type() == Layer::DENSE)
 				static_cast<Dense*>(layer[i])->fogot(number);
@@ -248,10 +268,14 @@ public:
 				static_cast<Filter*>(layer[i])-> fogot(number);
 		}
 	}
-	void fogot_all() {
+
+	void fogot_all() {																						// call fogot function with memory lenght
 		fogot(layer[0]->v.size());
 	}
-	void change_dependencies() {
+
+
+
+	void change_dependencies() {																			// change weight and bias with computed changeing value
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->get_type() == Layer::DENSE)
 				static_cast<Dense*>(layer[i])->change_dependencies();
@@ -263,7 +287,8 @@ public:
 				;
 		}
 	}
-	void set_change_dependencies(const double& number) {
+
+	void set_change_dependencies(const double& number) {													// set changing value to specific value
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->get_type() == Layer::DENSE)
 				static_cast<Dense*>(layer[i])->set_change_dependencies(number);
@@ -275,7 +300,8 @@ public:
 				;
 		}
 	}
-	void mul_change_dependencies(const double& number) {
+
+	void mul_change_dependencies(const double& number) {													// multiply changing value with specific value
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->get_type() == Layer::DENSE)
 				static_cast<Dense*>(layer[i])->mul_change_dependencies(number);
@@ -287,29 +313,40 @@ public:
 				;
 		}
 	}
-	void set_all_learning_rate(const double& number) {
+
+
+
+	void set_all_learning_rate(const double& number) {														// set every layer's learning rate to specific value
 		for (int i = 0; i < layer.size(); i++) {
 			layer[i]->set_learning_rate(number);
 		}
 	}
-	void set_all_drop_out_rate(const double& number) {
+
+	void set_all_drop_out_rate(const double& number) {														// set every drop layer's drop out rate to specific layer
 		for (int i = 0; i < layer.size(); i++) {
 			if (layer[i]->get_type() == Layer::DROPOUT)
 				static_cast<DropOut*>(layer[i])->set_drop_out_rate(number);
 		}
 	}
+
+	std::size_t get_layer_size() {
+		return layer.size();
+	}
+
 	Matrix<double> get_output() {
 		return layer.back()->value;
 	}
+
 	std::size_t get_input_size() {
 		return layer[0]->get_size();
 	}
+
 	double get_loss(const Matrix<double>& target) {
 		return loss_func(layer.back()->value, target);
 	}
 
 private:
-	std::vector<Layer*> layer;
-	std::function<double(const Matrix<double>&, const Matrix<double>&)> loss_func;
-	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dloss_func;
+	std::vector<Layer*> layer;																				// pointer containing all of the layers
+	std::function<double(const Matrix<double>&, const Matrix<double>&)> loss_func;							// function computing loss
+	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dloss_func;					// derivatives loss funtio
 };
