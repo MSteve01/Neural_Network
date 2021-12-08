@@ -256,21 +256,21 @@ public:
 
 
 
-	void fogot(const std::size_t& number) {																	// delete the past value memory
+	void forgot(const std::size_t& number) {																	// delete the past value memory
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->get_type() == Layer::DENSE)
-				static_cast<Dense*>(layer[i])->fogot(number);
+				static_cast<Dense*>(layer[i])->forgot(number);
 			else if (layer[i]->get_type() == Layer::LSTM)
-				static_cast<LSTM*>(layer[i])->fogot(number);
+				static_cast<LSTM*>(layer[i])->forgot(number);
 			else if (layer[i]->get_type() == Layer::DROPOUT)
-				static_cast<DropOut*>(layer[i])->fogot(number);
+				static_cast<DropOut*>(layer[i])->forgot(number);
 			else if (layer[i]->get_type() == Layer::FILTER)
-				static_cast<Filter*>(layer[i])-> fogot(number);
+				static_cast<Filter*>(layer[i])-> forgot(number);
 		}
 	}
 
-	void fogot_all() {																						// call fogot function with memory lenght
-		fogot(layer[0]->v.size());
+	void forgot_all() {																						// call forgot function with memory lenght
+		forgot(layer[0]->v.size());
 	}
 
 

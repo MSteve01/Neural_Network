@@ -120,7 +120,7 @@ public:
 	
 
 
-	void fogot(const std::size_t& number) {																	// delete old memory and shift the new memory
+	void forgot(const std::size_t& number) {																	// delete old memory and shift the new memory
 		int h = number;
 		if (number > v.size())
 			h = v.size();
@@ -132,8 +132,8 @@ public:
 		}
 	}
 
-	void fogot_all() {																						// delete all memory
-		fogot(v.size());
+	void forgot_all() {																						// delete all memory
+		forgot(v.size());
 	}
 
 
@@ -162,7 +162,7 @@ public:
 	void reconstruct(const std::size_t& size, const std::size_t& next,
 		std::function<Matrix<double>(const Matrix<double>&)> _act_func = sigmoid_func,
 		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dact_func = dsigmoid_func) {
-		fogot_all();
+		forgot_all();
 
 		value.reconstruct(size, 1);
 		weight.reconstruct(next, size);
@@ -173,7 +173,7 @@ public:
 	}
 
 	void reconstruct(const LayerId& set,const size_t& next) {
-		fogot_all();
+		forgot_all();
 
 		value.reconstruct(set.Layer_size, 1);
 		weight.reconstruct(next, set.Layer_size);

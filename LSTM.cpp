@@ -147,11 +147,11 @@ public:
 		
 	Matrix<double> feed() {																						// feedforward
 		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);			// compute input gate
-		Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);			// compute forgot gate
+		Matrix<double> forgot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);			// compute forgot gate
 		Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h.back()) + Obias);			// compute output gate
 		Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h.back()) + Kbias);
 
-		c.push_back(mul_each(fogot_gate, c.back()) + mul_each(input_gate, K));									// compute and remember cell state
+		c.push_back(mul_each(forgot_gate, c.back()) + mul_each(input_gate, K));									// compute and remember cell state
 		h.push_back(mul_each(output_gate, c.back()));															// compute and remember output fo the cell
 		v.push_back(value);																						// remember given input
 
@@ -196,7 +196,7 @@ public:
 			set_Matrix(next_dh, 0);
 
 			Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias);		// compute input gate
-			Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias);		// compute forgot gate
+			Matrix<double> forgot_gate = Fact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias);		// compute forgot gate
 			Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h[round]) + Obias);		// comput output gate
 			Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias);
 
@@ -204,7 +204,7 @@ public:
 			dc = dc + mul_each(dh, output_gate);																// add up cell state error
 
 			Matrix<double> dinput_gate = dIact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias, mul_each(dc, K));// derivative of input gate
-			Matrix<double> dfogot_gate = dFact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));// derivative of forgot gate
+			Matrix<double> dforgot_gate = dFact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));// derivative of forgot gate
 			Matrix<double> doutput_gate = dOact_func((xO_weight * value) + (hO_weight * h[round]) + Obias, mul_each(dh, c[round + 1]));// derivative of output
 			Matrix<double> dK = dKact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias, mul_each(dc, input_gate));
 
@@ -214,30 +214,30 @@ public:
 					hO_weight_change[i][j] += doutput_gate[i][0] * h[round][j][0] * learning_rate;
 					xI_weight_change[i][j] += dinput_gate[i][0] * v[round][j][0] * learning_rate;
 					hI_weight_change[i][j] += dinput_gate[i][0] * h[round][j][0] * learning_rate;
-					xF_weight_change[i][j] += dfogot_gate[i][0] * v[round][j][0] * learning_rate;
-					hF_weight_change[i][j] += dfogot_gate[i][0] * h[round][j][0] * learning_rate;
+					xF_weight_change[i][j] += dforgot_gate[i][0] * v[round][j][0] * learning_rate;
+					hF_weight_change[i][j] += dforgot_gate[i][0] * h[round][j][0] * learning_rate;
 					xK_weight_change[i][j] += dK[i][0] * v[round][j][0] * learning_rate;
 					hK_weight_change[i][j] += dK[i][0] * h[round][j][0] * learning_rate;
 
 					next_dh[i][0] += doutput_gate[i][0] * hO_weight_change[i][j];								// comupute next time step output error
 					next_dh[i][0] += dinput_gate[i][0] * hI_weight_change[i][j];
-					next_dh[i][0] += dfogot_gate[i][0] * hF_weight_change[i][j];
+					next_dh[i][0] += dforgot_gate[i][0] * hF_weight_change[i][j];
 					next_dh[i][0] += dK[i][0] * hK_weight_change[i][j];
 
 					flow_gadient[round][i][0] += doutput_gate[i][0] * xO_weight_change[i][j];					// computer flow gadient
 					flow_gadient[round][i][0] += dinput_gate[i][0] * xI_weight_change[i][j];
-					flow_gadient[round][i][0] += dfogot_gate[i][0] * xF_weight_change[i][j];
+					flow_gadient[round][i][0] += dforgot_gate[i][0] * xF_weight_change[i][j];
 					flow_gadient[round][i][0] += dK[i][0] * hK_weight_change[i][j];
 				
 				}
 				Obias_change[i][0] += doutput_gate[i][0] * learning_rate;										// compute changing bias
 				Ibias_change[i][0] += dinput_gate[i][0] * learning_rate;
-				Fbias_change[i][0] += dfogot_gate[i][0] * learning_rate;
+				Fbias_change[i][0] += dforgot_gate[i][0] * learning_rate;
 				Kbias_change[i][0] += dK[i][0] * learning_rate;
 
 			}
 
-			next_dc = mul_each(dc, fogot_gate);																	// compute next time step cell state error
+			next_dc = mul_each(dc, forgot_gate);																	// compute next time step cell state error
 
 			dh = next_dh;																						
 			dc = next_dc;
@@ -261,7 +261,7 @@ public:
 	
 
 
-	void fogot(const std::size_t& number) {
+	void forgot(const std::size_t& number) {
 		std::size_t _number = number;
 		if (number > v.size())
 			_number = v.size();
@@ -281,8 +281,8 @@ public:
 		}
 	}
 
-	void fogot_all() {
-		fogot(v.size());
+	void forgot_all() {
+		forgot(v.size());
 	}
 
 
@@ -399,7 +399,7 @@ public:
 		set_Matrix(init_c, 0);
 		set_Matrix(init_h, 0);
 
-		fogot_all();
+		forgot_all();
 		c.push_back(init_c);
 		h.push_back(init_h);
 	}
@@ -622,7 +622,7 @@ public:
 
 	void print_value() {
 		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);
-		Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);
+		Matrix<double> forgot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);
 		Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h.back()) + Obias);
 		Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h.back()) + Kbias);
 		std::cout << "--------------LSTM Layer----------\n\n";
@@ -634,9 +634,9 @@ public:
 		for (int i = 0; i < input_gate.get_row(); i++) {
 			std::cout << input_gate[i][0] << "    \t";
 		}std::cout << std::endl;
-		std::cout << "--------fogot--------\n";
-		for (int i = 0; i < fogot_gate.get_row(); i++) {
-			std::cout << fogot_gate[i][0] << "    \t";
+		std::cout << "--------forgot--------\n";
+		for (int i = 0; i < forgot_gate.get_row(); i++) {
+			std::cout << forgot_gate[i][0] << "    \t";
 		}std::cout << std::endl;
 		std::cout << "--------output-------\n";
 		for (int i = 0; i < output_gate.get_row(); i++) {
@@ -659,7 +659,7 @@ protected:
 	}
 
 	void print_xF_weight() {
-		std::cout << "  -----x-fogot weight----\n";
+		std::cout << "  -----x-forgot weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			for (int j = 0; j < value.get_row(); j++) {
 				std::cout << xF_weight[i][j] << "    \t";
@@ -699,7 +699,7 @@ protected:
 	}
 
 	void print_hF_weight() {
-		std::cout << "  -----h-fogot weight----\n";
+		std::cout << "  -----h-forgot weight----\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			for (int j = 0; j < value.get_row(); j++) {
 				std::cout << hF_weight[i][j] << "    \t";
@@ -736,7 +736,7 @@ protected:
 	}
 
 	void print_Fbias() {
-		std::cout << "   ---fogot bias------\n";
+		std::cout << "   ---forgot bias------\n";
 		for (int i = 0; i < value.get_row(); i++) {
 			std::cout << Fbias[i][0] << "    \t";
 		}std::cout << std::endl;

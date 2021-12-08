@@ -126,7 +126,7 @@ double learn(Neural_Network& AI, std::vector<Matrix<double>> Data, int start) {
 
 	have_trained++;
 	AI.change_dependencies();
-	AI.fogot_all();
+	AI.forgot_all();
 
 	return lost;
 }
@@ -142,7 +142,7 @@ std::vector<Matrix<double>> predict(Neural_Network& AI, std::vector<Matrix<doubl
 		//AI.feedforward(result.back());
 	}
 
-	AI.fogot_all();
+	AI.forgot_all();
 	return result;
 }
 
@@ -186,7 +186,14 @@ int main() {
 		std::ofstream lost_file(Lost_file_name);
 
 		for (int i = 0; i + input_range + output_range < learning_range; i++) {									// loop though every data for learning
-			
+			if (i >= 200000)
+				AI.set_all_learning_rate(0.000001);
+			else if (i >= 150000)
+				AI.set_all_learning_rate(0.00005);
+			else if (i >= 100000)
+				AI.set_all_learning_rate(0.0001);
+			else if (i >= 50000)
+				AI.set_all_learning_rate(0.0005);
 			if (i % load_range == 0) {																			// loas data
 				Data = load_data(AI.get_input_size(), load_range);
 			}
