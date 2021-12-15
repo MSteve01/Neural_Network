@@ -1,27 +1,9 @@
 #pragma once
-#include "Header.h"
-#include "Layer.cpp"
-#include "LayerId.cpp"
+#include "Header.cuh"
+#include "Layer.cu"
+#include "LayerId.cu"
 
-// import functions
-extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
-
-
-// declare functions
-double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
-void set_Matrix(Matrix<double>& M, double value);
-Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
-double get_max(const Matrix<double>& M);
-double get_min(const Matrix<double>& M);
-void universal_set_func(std::function<Matrix<double>(const Matrix<double>&)>& func, const std::string& setting, int& i);
-void universal_set_func(std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)>& func, const std::string& setting, int& i);
-std::string get_text(const std::string& str, int& i);
-double get_number(const std::string& str, int& i);
-
+#include "Func.cuh"
 
 class LSTM : public Layer {
 public:
@@ -147,11 +129,11 @@ public:
 		
 	Matrix<double> feed() {																						// feedforward
 		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);			// compute input gate
-		Matrix<double> forgot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);			// compute forgot gate
+		Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);			// compute forgot gate
 		Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h.back()) + Obias);			// compute output gate
 		Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h.back()) + Kbias);
 
-		c.push_back(mul_each(forgot_gate, c.back()) + mul_each(input_gate, K));									// compute and remember cell state
+		c.push_back(mul_each(fogot_gate, c.back()) + mul_each(input_gate, K));									// compute and remember cell state
 		h.push_back(mul_each(output_gate, c.back()));															// compute and remember output fo the cell
 		v.push_back(value);																						// remember given input
 
@@ -196,7 +178,7 @@ public:
 			set_Matrix(next_dh, 0);
 
 			Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias);		// compute input gate
-			Matrix<double> forgot_gate = Fact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias);		// compute forgot gate
+			Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias);		// compute forgot gate
 			Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h[round]) + Obias);		// comput output gate
 			Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias);
 
@@ -204,40 +186,47 @@ public:
 			dc = dc + mul_each(dh, output_gate);																// add up cell state error
 
 			Matrix<double> dinput_gate = dIact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias, mul_each(dc, K));// derivative of input gate
-			Matrix<double> dforgot_gate = dFact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));// derivative of forgot gate
+			Matrix<double> dfogot_gate = dFact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));// derivative of forgot gate
 			Matrix<double> doutput_gate = dOact_func((xO_weight * value) + (hO_weight * h[round]) + Obias, mul_each(dh, c[round + 1]));// derivative of output
 			Matrix<double> dK = dKact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias, mul_each(dc, input_gate));
 
-			for (int i = 0; i < value.get_row(); i++) {															// loop though every output row
-				for (int j = 0; j < value.get_row(); j++) {														// loop though every input row
-					xO_weight_change[i][j] += doutput_gate[i][0] * v[round][j][0] * learning_rate;				// comupute changing weight
-					hO_weight_change[i][j] += doutput_gate[i][0] * h[round][j][0] * learning_rate;
-					xI_weight_change[i][j] += dinput_gate[i][0] * v[round][j][0] * learning_rate;
-					hI_weight_change[i][j] += dinput_gate[i][0] * h[round][j][0] * learning_rate;
-					xF_weight_change[i][j] += dforgot_gate[i][0] * v[round][j][0] * learning_rate;
-					hF_weight_change[i][j] += dforgot_gate[i][0] * h[round][j][0] * learning_rate;
-					xK_weight_change[i][j] += dK[i][0] * v[round][j][0] * learning_rate;
-					hK_weight_change[i][j] += dK[i][0] * h[round][j][0] * learning_rate;
 
-					next_dh[i][0] += doutput_gate[i][0] * hO_weight_change[i][j];								// comupute next time step output error
-					next_dh[i][0] += dinput_gate[i][0] * hI_weight_change[i][j];
-					next_dh[i][0] += dforgot_gate[i][0] * hF_weight_change[i][j];
-					next_dh[i][0] += dK[i][0] * hK_weight_change[i][j];
+			int blockPergrid = upper_value(double(value.get_size()) / 1024);
+			int threadPerblock = std::min(value.get_size(), 1024);
 
-					flow_gadient[round][i][0] += doutput_gate[i][0] * xO_weight_change[i][j];					// computer flow gadient
-					flow_gadient[round][i][0] += dinput_gate[i][0] * xI_weight_change[i][j];
-					flow_gadient[round][i][0] += dforgot_gate[i][0] * xF_weight_change[i][j];
-					flow_gadient[round][i][0] += dK[i][0] * hK_weight_change[i][j];
-				
-				}
-				Obias_change[i][0] += doutput_gate[i][0] * learning_rate;										// compute changing bias
-				Ibias_change[i][0] += dinput_gate[i][0] * learning_rate;
-				Fbias_change[i][0] += dforgot_gate[i][0] * learning_rate;
-				Kbias_change[i][0] += dK[i][0] * learning_rate;
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xO_weight_change.get_value(), doutput_gate.get_value(), v[round].get_value(), xO_weight_change.get_row(), xO_weight_change.get_column(), learning_rate);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hO_weight_change.get_value(), doutput_gate.get_value(), h[round].get_value(), hO_weight_change.get_row(), hO_weight_change.get_column(), learning_rate);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xI_weight_change.get_value(), dinput_gate.get_value(), v[round].get_value(), xI_weight_change.get_row(), xI_weight_change.get_column(), learning_rate);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hI_weight_change.get_value(), dinput_gate.get_value(), h[round].get_value(), hI_weight_change.get_row(), hI_weight_change.get_column(), learning_rate);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xF_weight_change.get_value(), dfogot_gate.get_value(), v[round].get_value(), xF_weight_change.get_row(), xF_weight_change.get_column(), learning_rate);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hF_weight_change.get_value(), dfogot_gate.get_value(), h[round].get_value(), hF_weight_change.get_row(), hF_weight_change.get_column(), learning_rate);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xK_weight_change.get_value(), dK.get_value(), v[round].get_value(), xK_weight_change.get_row(), xK_weight_change.get_column(), learning_rate);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hK_weight_change.get_value(), dK.get_value(), h[round].get_value(), hK_weight_change.get_row(), hK_weight_change.get_column(), learning_rate);
+			cudaDeviceSynchronize();
 
-			}
+			device_flow_compute << <blockPergrid, threadPerblock >> > (next_dh.get_value(), doutput_gate.get_value(), hO_weight_change.get_value(), hO_weight_change.get_row(), hO_weight_change.get_column());
+			cudaDeviceSynchronize();
+			device_flow_compute << <blockPergrid, threadPerblock >> > (next_dh.get_value(), dinput_gate.get_value(), hI_weight_change.get_value(), hI_weight_change.get_row(), hI_weight_change.get_column());
+			cudaDeviceSynchronize();
+			device_flow_compute << <blockPergrid, threadPerblock >> > (next_dh.get_value(), dfogot_gate.get_value(), hF_weight_change.get_value(), hF_weight_change.get_row(), hF_weight_change.get_column());
+			cudaDeviceSynchronize();
+			device_flow_compute << <blockPergrid, threadPerblock >> > (next_dh.get_value(), dK.get_value(), hK_weight_change.get_value(), hK_weight_change.get_row(), hK_weight_change.get_column());
+			cudaDeviceSynchronize();
+			device_flow_compute << <blockPergrid, threadPerblock >> > (flow_gadient[round].get_value(), doutput_gate.get_value(), xO_weight_change.get_value(), xO_weight_change.get_row(), hO_weight_change.get_column());
+			cudaDeviceSynchronize();
+			device_flow_compute << <blockPergrid, threadPerblock >> > (flow_gadient[round].get_value(), dinput_gate.get_value(), xI_weight_change.get_value(), xI_weight_change.get_row(), hI_weight_change.get_column());
+			cudaDeviceSynchronize();
+			device_flow_compute << <blockPergrid, threadPerblock >> > (flow_gadient[round].get_value(), dfogot_gate.get_value(), xF_weight_change.get_value(), xF_weight_change.get_row(), hF_weight_change.get_column());
+			cudaDeviceSynchronize();
+			device_flow_compute << <blockPergrid, threadPerblock >> > (flow_gadient[round].get_value(), dK.get_value(), xK_weight_change.get_value(), xK_weight_change.get_row(), hK_weight_change.get_column());
+			cudaDeviceSynchronize();
 
-			next_dc = mul_each(dc, forgot_gate);																	// compute next time step cell state error
+			Obias_change = Obias_change + doutput_gate * learning_rate;										// compute changing bias
+			Ibias_change = Ibias_change + dinput_gate * learning_rate;
+			Fbias_change = Fbias_change + dfogot_gate * learning_rate;
+			Kbias_change = Kbias_change + dK * learning_rate;
+
+			next_dc = mul_each(dc, fogot_gate);																	// compute next time step cell state error
 
 			dh = next_dh;																						
 			dc = next_dc;
@@ -250,18 +239,16 @@ public:
 			if (max_dh_value > flow_cap) dh = dh * (flow_cap / max_dh_value);
 			if (max_dc_value > flow_cap) dc = dc * (flow_cap / max_dc_value);
 		}
-
-		for (int i = 0; i < value.get_row(); i++) {																// compute initial cell state
-			init_h_change[i][0] += dh[i][0] * learning_rate;
-			init_c_change[i][0] += dc[i][0] * learning_rate;
-		}
+													// compute initial cell state
+		init_h_change = init_h_change + dh * learning_rate;
+		init_c_change = init_c_change + dc * learning_rate;
 
 		return flow_gadient;
 	}
 	
 
 
-	void forgot(const std::size_t& number) {
+	void fogot(const std::size_t& number) {
 		std::size_t _number = number;
 		if (number > v.size())
 			_number = v.size();
@@ -281,8 +268,8 @@ public:
 		}
 	}
 
-	void forgot_all() {
-		forgot(v.size());
+	void fogot_all() {
+		fogot(v.size());
 	}
 
 
@@ -399,7 +386,7 @@ public:
 		set_Matrix(init_c, 0);
 		set_Matrix(init_h, 0);
 
-		forgot_all();
+		fogot_all();
 		c.push_back(init_c);
 		h.push_back(init_h);
 	}
@@ -463,103 +450,235 @@ public:
 
 
 	void rand_weight(const double& min,const double& max) {
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				xO_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-				xF_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-				xI_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-				xK_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-
-				hO_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
-				hF_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
-				hI_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
-				hK_weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
-			}
+		double* xO_weightHost = new double[value.get_size() * value.get_size()];
+		double* xF_weightHost = new double[value.get_size() * value.get_size()];
+		double* xI_weightHost = new double[value.get_size() * value.get_size()];
+		double* xK_weightHost = new double[value.get_size() * value.get_size()];
+		double* hO_weightHost = new double[value.get_size() * value.get_size()];
+		double* hF_weightHost = new double[value.get_size() * value.get_size()];
+		double* hI_weightHost = new double[value.get_size() * value.get_size()];
+		double* hK_weightHost = new double[value.get_size() * value.get_size()];
+		for (int i = 0; i < value.get_size() * value.get_size(); i++) {
+			xO_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
+			xF_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
+			xI_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
+			xK_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
+			hO_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
+			hF_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
+			hI_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
+			hK_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
 		}
+		cudaMemcpy(xO_weight.get_value(), xO_weightHost, xO_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xI_weight.get_value(), xI_weightHost, xI_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xF_weight.get_value(), xF_weightHost, xF_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xK_weight.get_value(), xK_weightHost, xK_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hO_weight.get_value(), hO_weightHost, hO_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hI_weight.get_value(), hI_weightHost, hI_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hF_weight.get_value(), hF_weightHost, hF_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hK_weight.get_value(), hK_weightHost, hK_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] xO_weightHost;
+		delete[] xF_weightHost;
+		delete[] xI_weightHost;
+		delete[] xK_weightHost;
+		delete[] hO_weightHost;
+		delete[] hF_weightHost;
+		delete[] hI_weightHost;
+		delete[] hK_weightHost;
 	}
 
 	void rand_weight(std::pair<const double&, const double&> setting) {
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				xO_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-				xF_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-				xI_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-				xK_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-
-				hO_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
-				hF_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
-				hI_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
-				hK_weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
-			}
+		double* xO_weightHost = new double[value.get_size() * value.get_size()];
+		double* xF_weightHost = new double[value.get_size() * value.get_size()];
+		double* xI_weightHost = new double[value.get_size() * value.get_size()];
+		double* xK_weightHost = new double[value.get_size() * value.get_size()];
+		double* hO_weightHost = new double[value.get_size() * value.get_size()];
+		double* hF_weightHost = new double[value.get_size() * value.get_size()];
+		double* hI_weightHost = new double[value.get_size() * value.get_size()];
+		double* hK_weightHost = new double[value.get_size() * value.get_size()];
+		for (int i = 0; i < value.get_size() * value.get_size(); i++) {
+			xO_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+			xF_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+			xI_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+			xK_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+			hO_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
+			hF_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
+			hI_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
+			hK_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
 		}
+		cudaMemcpy(xO_weight.get_value(), xO_weightHost, xO_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xI_weight.get_value(), xI_weightHost, xI_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xF_weight.get_value(), xF_weightHost, xF_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xK_weight.get_value(), xK_weightHost, xK_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hO_weight.get_value(), hO_weightHost, hO_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hI_weight.get_value(), hI_weightHost, hI_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hF_weight.get_value(), hF_weightHost, hF_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hK_weight.get_value(), hK_weightHost, hK_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] xO_weightHost;
+		delete[] xF_weightHost;
+		delete[] xI_weightHost;
+		delete[] xK_weightHost;
+		delete[] hO_weightHost;
+		delete[] hF_weightHost;
+		delete[] hI_weightHost;
+		delete[] hK_weightHost;
 	}
 	
 	void rand_weight(std::function<double()> func) {
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				xO_weight[i][j] = func();
-				xF_weight[i][j] = func();
-				xI_weight[i][j] = func();
-				xK_weight[i][j] = func();
-
-				hO_weight[i][j] = func() / 10;
-				hF_weight[i][j] = func() / 10;
-				hI_weight[i][j] = func() / 10;
-				hK_weight[i][j] = func() / 10;
-			}
+		double* xO_weightHost = new double[value.get_size() * value.get_size()];
+		double* xF_weightHost = new double[value.get_size() * value.get_size()];
+		double* xI_weightHost = new double[value.get_size() * value.get_size()];
+		double* xK_weightHost = new double[value.get_size() * value.get_size()];
+		double* hO_weightHost = new double[value.get_size() * value.get_size()];
+		double* hF_weightHost = new double[value.get_size() * value.get_size()];
+		double* hI_weightHost = new double[value.get_size() * value.get_size()];
+		double* hK_weightHost = new double[value.get_size() * value.get_size()];
+		for (int i = 0; i < value.get_size() * value.get_size(); i++) {
+			xO_weightHost[i] = func();
+			xF_weightHost[i] = func();
+			xI_weightHost[i] = func();
+			xK_weightHost[i] = func();
+			hO_weightHost[i] = func() / 10;
+			hF_weightHost[i] = func() / 10;
+			hI_weightHost[i] = func() / 10;
+			hK_weightHost[i] = func() / 10;
 		}
+		cudaMemcpy(xO_weight.get_value(), xO_weightHost, xO_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xI_weight.get_value(), xI_weightHost, xI_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xF_weight.get_value(), xF_weightHost, xF_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xK_weight.get_value(), xK_weightHost, xK_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hO_weight.get_value(), hO_weightHost, hO_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hI_weight.get_value(), hI_weightHost, hI_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hF_weight.get_value(), hF_weightHost, hF_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hK_weight.get_value(), hK_weightHost, hK_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] xO_weightHost;
+		delete[] xF_weightHost;
+		delete[] xI_weightHost;
+		delete[] xK_weightHost;
+		delete[] hO_weightHost;
+		delete[] hF_weightHost;
+		delete[] hI_weightHost;
+		delete[] hK_weightHost;
 	}
 
 	void rand_weight(std::function<double(std::size_t,std::size_t)> func,std::size_t next) {
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				xO_weight[i][j] = func(value.get_row(),next);
-				xF_weight[i][j] = func(value.get_row(), next);
-				xI_weight[i][j] = func(value.get_row(), next);
-				xK_weight[i][j] = func(value.get_row(), next);
-
-				hO_weight[i][j] = func(value.get_row(), next) / 10;
-				hF_weight[i][j] = func(value.get_row(), next) / 10;
-				hI_weight[i][j] = func(value.get_row(), next) / 10;
-				hK_weight[i][j] = func(value.get_row(), next) / 10;
-			}
+		double* xO_weightHost = new double[value.get_size() * value.get_size()];
+		double* xF_weightHost = new double[value.get_size() * value.get_size()];
+		double* xI_weightHost = new double[value.get_size() * value.get_size()];
+		double* xK_weightHost = new double[value.get_size() * value.get_size()];
+		double* hO_weightHost = new double[value.get_size() * value.get_size()];
+		double* hF_weightHost = new double[value.get_size() * value.get_size()];
+		double* hI_weightHost = new double[value.get_size() * value.get_size()];
+		double* hK_weightHost = new double[value.get_size() * value.get_size()];
+		for (int i = 0; i < value.get_size() * value.get_size(); i++) {
+			xO_weightHost[i] = func(value.get_row(), next);
+			xF_weightHost[i] = func(value.get_row(), next);
+			xI_weightHost[i] = func(value.get_row(), next);
+			xK_weightHost[i] = func(value.get_row(), next);
+			hO_weightHost[i] = func(value.get_row(), next) / 10;
+			hF_weightHost[i] = func(value.get_row(), next) / 10;
+			hI_weightHost[i] = func(value.get_row(), next) / 10;
+			hK_weightHost[i] = func(value.get_row(), next) / 10;
 		}
+		cudaMemcpy(xO_weight.get_value(), xO_weightHost, xO_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xI_weight.get_value(), xI_weightHost, xI_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xF_weight.get_value(), xF_weightHost, xF_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(xK_weight.get_value(), xK_weightHost, xK_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hO_weight.get_value(), hO_weightHost, hO_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hI_weight.get_value(), hI_weightHost, hI_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hF_weight.get_value(), hF_weightHost, hF_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(hK_weight.get_value(), hK_weightHost, hK_weight.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] xO_weightHost;
+		delete[] xF_weightHost;
+		delete[] xI_weightHost;
+		delete[] xK_weightHost;
+		delete[] hO_weightHost;
+		delete[] hF_weightHost;
+		delete[] hI_weightHost;
+		delete[] hK_weightHost;
 	}
 
 	void rand_bias(const double& min, const double& max) {
-		for (int i = 0; i < value.get_row(); i++) {
-			Obias[i][0] = mapping(rand() % 10000, 0, 10000, min, max);
-			Fbias[i][0] = mapping(rand() % 10000, 0, 10000, min, max);
-			Ibias[i][0] = mapping(rand() % 10000, 0, 10000, min, max);
-			Kbias[i][0] = mapping(rand() % 10000, 0, 10000, min, max);
+		double* ObiasHost = new double[value.get_size()];
+		double* FbiasHost = new double[value.get_size()];
+		double* IbiasHost = new double[value.get_size()];
+		double* KbiasHost = new double[value.get_size()];
+		for (int i = 0; i < value.get_size(); i++) {
+			ObiasHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
+			FbiasHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
+			IbiasHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
+			KbiasHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
 		}
+		cudaMemcpy(Obias.get_value(), ObiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Ibias.get_value(), IbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Fbias.get_value(), FbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Kbias.get_value(), KbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] ObiasHost;
+		delete[] IbiasHost;
+		delete[] FbiasHost;
+		delete[] KbiasHost;
 	}
 
 	void rand_bias(std::pair<const double&,const double&> setting) {
-		for (int i = 0; i < value.get_row(); i++) {
-			Obias[i][0] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-			Fbias[i][0] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-			Ibias[i][0] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-			Kbias[i][0] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+		double* ObiasHost = new double[value.get_size()];
+		double* FbiasHost = new double[value.get_size()];
+		double* IbiasHost = new double[value.get_size()];
+		double* KbiasHost = new double[value.get_size()];
+		for (int i = 0; i < value.get_size(); i++) {
+			ObiasHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+			FbiasHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+			IbiasHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+			KbiasHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
 		}
+		cudaMemcpy(Obias.get_value(), ObiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Ibias.get_value(), IbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Fbias.get_value(), FbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Kbias.get_value(), KbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] ObiasHost;
+		delete[] IbiasHost;
+		delete[] FbiasHost;
+		delete[] KbiasHost;
 	}
 	
 	void rand_bias(std::function<double()> func) {
-		for (int i = 0; i < value.get_row(); i++) {
-			Obias[i][0] = func();
-			Fbias[i][0] = func();
-			Ibias[i][0] = func();
-			Kbias[i][0] = func();
+		double* ObiasHost = new double[value.get_size()];
+		double* FbiasHost = new double[value.get_size()];
+		double* IbiasHost = new double[value.get_size()];
+		double* KbiasHost = new double[value.get_size()];
+		for (int i = 0; i < value.get_size(); i++) {
+			ObiasHost[i] = func();
+			FbiasHost[i] = func();
+			IbiasHost[i] = func();
+			KbiasHost[i] = func();;
 		}
+		cudaMemcpy(Obias.get_value(), ObiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Ibias.get_value(), IbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Fbias.get_value(), FbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Kbias.get_value(), KbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] ObiasHost;
+		delete[] IbiasHost;
+		delete[] FbiasHost;
+		delete[] KbiasHost;
 	}
 
 	void rand_bias(std::function<double(std::size_t,std::size_t)> func,std::size_t next) {
-		for (int i = 0; i < value.get_row(); i++) {
-			Obias[i][0] = func(value.get_row(),next);
-			Fbias[i][0] = func(value.get_row(), next);
-			Ibias[i][0] = func(value.get_row(), next);
-			Kbias[i][0] = func(value.get_row(), next);
+		double* ObiasHost = new double[value.get_size()];
+		double* FbiasHost = new double[value.get_size()];
+		double* IbiasHost = new double[value.get_size()];
+		double* KbiasHost = new double[value.get_size()];
+		for (int i = 0; i < value.get_size(); i++) {
+			ObiasHost[i] = func(value.get_row(), next);
+			FbiasHost[i] = func(value.get_row(), next);
+			IbiasHost[i] = func(value.get_row(), next);
+			KbiasHost[i] = func(value.get_row(), next);
 		}
+		cudaMemcpy(Obias.get_value(), ObiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Ibias.get_value(), IbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Fbias.get_value(), FbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaMemcpy(Kbias.get_value(), KbiasHost, Obias.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] ObiasHost;
+		delete[] IbiasHost;
+		delete[] FbiasHost;
+		delete[] KbiasHost;
 	}
 
 
@@ -622,153 +741,86 @@ public:
 
 	void print_value() {
 		Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h.back()) + Ibias);
-		Matrix<double> forgot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);
+		Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h.back()) + Fbias);
 		Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h.back()) + Obias);
 		Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h.back()) + Kbias);
 		std::cout << "--------------LSTM Layer----------\n\n";
-		std::cout << "--------value--------\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			std::cout << value[i][0] << "    \t";
-		}std::cout << std::endl;
+		value.print();
 		std::cout << "--------input--------\n";
-		for (int i = 0; i < input_gate.get_row(); i++) {
-			std::cout << input_gate[i][0] << "    \t";
-		}std::cout << std::endl;
-		std::cout << "--------forgot--------\n";
-		for (int i = 0; i < forgot_gate.get_row(); i++) {
-			std::cout << forgot_gate[i][0] << "    \t";
-		}std::cout << std::endl;
+		input_gate.print();
+		std::cout << "--------fogot--------\n";
+		fogot_gate.print();
 		std::cout << "--------output-------\n";
-		for (int i = 0; i < output_gate.get_row(); i++) {
-			std::cout << output_gate[i][0] << "    \t";
-		}std::cout << std::endl;
+		output_gate.print();
 		std::cout << "----------K----------\n";
-		for (int i = 0; i < K.get_row(); i++) {
-			std::cout << K[i][0] << "    \t";
-		}std::cout << std::endl;
+		K.print();
 	}
 protected:
 	void print_xO_weight() {
 		std::cout << "  -----x-output weight----\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				std::cout << xO_weight[i][j] << "    \t";
-			}
-			std::cout << std::endl;
-		}
+		xO_weight.print();
 	}
 
 	void print_xF_weight() {
-		std::cout << "  -----x-forgot weight----\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				std::cout << xF_weight[i][j] << "    \t";
-			}
-			std::cout << std::endl;
-		}
+		std::cout << "  -----x-fogot weight----\n";
+		xF_weight.print();
 	}
 
 	void print_xI_weight() {
 		std::cout << "  -----x-input weight----\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				std::cout << xI_weight[i][j] << "    \t";
-			}
-			std::cout << std::endl;
-		}
+		xI_weight.print();
 	}
 
 	void print_xK_weight() {
 		std::cout << "  -----x-k    weight----\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				std::cout << xK_weight[i][j] << "    \t";
-			}
-			std::cout << std::endl;
-		}
+		xK_weight.print();
 	}
 
 	void print_hO_weight() {
 		std::cout << "  -----h-output weight----\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				std::cout << hO_weight[i][j] << "    \t";
-			}
-			std::cout << std::endl;
-		}
+		hO_weight.print();
 	}
 
 	void print_hF_weight() {
-		std::cout << "  -----h-forgot weight----\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				std::cout << hF_weight[i][j] << "    \t";
-			}
-			std::cout << std::endl;
-		}
+		std::cout << "  -----h-fogot weight----\n";
+		hF_weight.print();
 	}
 
 	void print_hI_weight() {
 		std::cout << "  -----h-input weight----\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				std::cout << hI_weight[i][j] << "    \t";
-			}
-			std::cout << std::endl;
-		}
+		hI_weight.print();
 	}
 
 	void print_hK_weight() {
 		std::cout << "  -----h-K     weight----\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			for (int j = 0; j < value.get_row(); j++) {
-				std::cout << hK_weight[i][j] << "    \t";
-			}
-			std::cout << std::endl;
-		}
+		hK_weight.print();
 	}
 
 	void print_Obias() {
 		std::cout << "   ---output bias------\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			std::cout << Obias[i][0] << "    \t";
-		}std::cout << std::endl;
+		Obias.print();
 	}
 
 	void print_Fbias() {
-		std::cout << "   ---forgot bias------\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			std::cout << Fbias[i][0] << "    \t";
-		}std::cout << std::endl;
+		std::cout << "   ---fogot bias------\n";
+		Fbias.print();
 	}
 
 	void print_Ibias() {
 		std::cout << "   ---input bias------\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			std::cout << Ibias[i][0] << "    \t";
-		}std::cout << std::endl;
+		Ibias.print();
 	}
 
 	void print_Kbias() {
 		std::cout << "   ---K     bias------\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			std::cout << Kbias[i][0] << "    \t";
-		}std::cout << std::endl;
+		Kbias.print();
 	}
 
 	void print_init() {
 		std::cout << " -------- init----------\n";
-		for (int i = 0; i < init_c.get_row(); i++) {
-			for (int j = 0; j < init_c.get_column(); j++) {
-				std::cout << init_c[i][j] << "    \t";
-			}std::cout << std::endl;
-		}
+		init_c.print();
 
-		for (int i = 0; i < init_h.get_row(); i++) {
-			for (int j = 0; j < init_h.get_column(); j++) {
-				std::cout << init_h[i][j] << "    \t";
-			}std::cout << std::endl;
-		}
+		init_h.print();
 	}
 
 

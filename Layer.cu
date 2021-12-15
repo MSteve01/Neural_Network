@@ -1,14 +1,8 @@
 #pragma once
 
-#include "Header.h"
-#include "Matrix.cpp"
-
-// import function
-extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
-
-// decalre class
-extern class Neural_Network;
+#include "Header.cuh"
+#include "Matrix.cu"
+#include "Func.cuh"
 
 class Layer {
 public:
@@ -30,9 +24,9 @@ public:
 
 	virtual std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient) = 0;		// required propagation function to backpropagation
 
-	virtual void forgot(const std::size_t& number) = 0;														// required forgot function
+	virtual void fogot(const std::size_t& number) = 0;														// required forgot function
 
-	virtual void forgot_all() = 0;																			// required forgot all function
+	virtual void fogot_all() = 0;																			// required forgot all function
 
 
 

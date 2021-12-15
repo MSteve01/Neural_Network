@@ -1,25 +1,9 @@
 #pragma once
-#include "Header.h"
-#include "Layer.cpp"
-#include "LayerId.cpp"
+#include "Header.cuh"
+#include "Layer.cu"
+#include "LayerId.cu"
 
-// import functions
-extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
-extern std::function<double()> normal_rand_func;
-
-
-// declare functions
-double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
-void set_Matrix(Matrix<double>& M, double value);
-Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
-std::string get_text(const std::string& str, int& i);
-double get_number(const std::string& str, int& i);
-
+#include "Func.cuh"
 
 
 class DropOut : public Layer {
@@ -44,12 +28,16 @@ public:
 		set_layer(set.setting);
 	}
 
-	Matrix<double> feed() {																						// feedforward
+	Matrix<double> feed() {
+		double* filterHost;
+		cudaMallocHost(&filterHost, value.get_sizeb());
 		Matrix<double> filter(value.get_row(),1);																// create Matrix containing filter				
 
 		for (int i = 0; i < value.get_row(); i++) {
-			filter[i][0] = rand_func() < drop_out_rate ? 0 : 1;													// randomly put 0 or 1 into filter
+			filterHost[i] = rand_func() < drop_out_rate ? 0 : 1;													// randomly put 0 or 1 into filter
 		}
+		cudaMemcpy(filter.get_value(), filterHost, filter.get_sizeb(), cudaMemcpyHostToDevice);
+		cudaFree(filterHost);
 		v.push_back(filter);																					// remember the filter
 		return mul_each(value,filter);																			// return Matrix for each value[i][j] if filter[i][j] = 1, otherwise 0
 	}
@@ -62,18 +50,17 @@ public:
 		for (int i = 0; i < gadient.size(); i++) {																// loop though every time step
 			result.push_back(Matrix<double>(gadient[i].get_row(),1));
 
-			for (int j = 0; j < gadient[i].get_row(); j++) {													// loop though every gadient
-				for (int k = 0; k < gadient[i].get_column(); k++) {
-					result[i][j][k] = gadient[i][j][k] * v[start_pos + i][j][k];								// compute flow gadient
-				}
-			}
+			int blockPergrid = upper_value(double(result[i].get_size()) / 1024);
+			int threadPerblock = std::min(result[i].get_size(), 1024);
+			device_valuechange_compute << <blockPergrid, threadPerblock >> > (result[i].get_value(), gadient[i].get_value(), v[start_pos + i].get_value(), result[i].get_size());
+			cudaDeviceSynchronize();
 		}
 		return result;
 	}
 
 
 
-	void forgot(const std::size_t& number) {																		// delete old memory and shift the new memory
+	void fogot(const std::size_t& number) {																		// delete old memory and shift the new memory
 		int h = number;
 		if (number > v.size())
 			h = v.size();
@@ -85,8 +72,8 @@ public:
 		}
 	}
 
-	void forgot_all() {																							// delete all memory
-		forgot(v.size());
+	void fogot_all() {																							// delete all memory
+		fogot(v.size());
 	}
 
 
@@ -114,7 +101,7 @@ public:
 
 
 	void reconstruct(const std::size_t& size, std::function<double()> _rand_func = []() {return double(rand() % 10000) / 10000; }) {
-		forgot_all();
+		fogot_all();
 		
 		value.reconstruct(size, 1);
 
@@ -168,9 +155,7 @@ public:
 
 	void print_value() {
 		std::cout << "---------DropOut Layer----------\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			std::cout << value[i][0] << "    \t";
-		}std::cout << std::endl;
+		value.print();
 	}
 
 

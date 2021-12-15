@@ -1,26 +1,10 @@
 #pragma once
 
-#include "Header.h"
-#include "Layer.cpp"
-#include "LayerId.cpp"
+#include "Header.cuh"
+#include "Layer.cu"
+#include "LayerId.cu"
 
-// import functions
-extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
-
-
-// declare functions
-double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
-void set_Matrix(Matrix<double>& M, double value);
-void universal_set_func(std::function<Matrix<double>(const Matrix<double>&)>& func, const std::string& setting, int& i);
-void universal_set_func(std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)>& func, const std::string& setting, int& i);
-std::string get_text(const std::string& str, int& i);
-double get_number(const std::string& str, int& i);
-
+#include "Func.cuh"
 
 
 class Dense : public Layer {
@@ -37,8 +21,8 @@ public:
 	}
 
 	Dense(const std::size_t& size, const std::size_t& next, 
-		std::function<Matrix<double>(const Matrix<double>&)> _act_func = sigmoid_func,
-		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dact_func = dsigmoid_func) {
+		nvstd::function<Matrix<double>(const Matrix<double>&)> _act_func = sigmoid_func,
+		nvstd::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dact_func = dsigmoid_func) {
 		Layer_type = Layer::DENSE;
 
 		value.reconstruct(size, 1);
@@ -90,29 +74,26 @@ public:
 			doutput.push_back(dact_func((weight * v[round + start_pos]) + bias, gadient[round]));			// compute derivative of each time step output
 		}
 
-		for (int round = 0; round < gadient.size(); round++) {												// loop though each time step
-			for (int i = 0; i < weight.get_row(); i++) {													// loop though every weight
-				for (int j = 0; j < weight.get_column(); j++) {
-					weight_change[i][j] += doutput[round][i][0] * v[round + start_pos][j][0] * learning_rate;// compute weight change
-				}
-			}
+		for (int round = 0; round < gadient.size(); round++) {
+			int size = weight.get_size();
+			int blockPergrid = upper_value(double(size) / 1024);
+			int threadPerblock = std::min(size, 1024);
+			device_weightchange_computeDENSE<<<blockPergrid,threadPerblock>>>(weight_change.get_value(), doutput[round].get_value(), v[round].get_value(), weight.get_row(), weight.get_column(),learning_rate);
+			cudaDeviceSynchronize();
 		}
 
 		for (int round = 0; round < gadient.size(); round++) {												// loop though each time step
-			for (int i = 0; i < bias.get_row(); i++) {														// loop though each bias
-				bias_change[i][0] += doutput[round][i][0] * learning_rate;									// compute bias change
-			}
+			bias_change = bias_change + (doutput[round] * learning_rate);
 		}
 
 		for (int round = 0; round < gadient.size(); round++) {												// loop though each time step
 			value_change.push_back(Matrix<double>(value.get_row(), 1));										
 			set_Matrix(value_change.back(), 0);																
 
-			for (int i = 0; i < weight.get_row(); i++) {													// loop though each weight 
-				for (int j = 0; j < weight.get_column(); j++) {
-					value_change.back()[j][0] += doutput[round][i][0] * weight[i][j];						// compute flow gadient
-				}
-			}
+			int blockPergrid = upper_value(double(value.get_size()) / 1024);
+			int threadPerblock = std::min(value.get_size(), 1024);
+			device_valuechange_compute << <blockPergrid, threadPerblock >> > (value_change.back().get_value(), doutput[round].get_value(), weight.get_value(), weight.get_row(), weight.get_column());
+			cudaDeviceSynchronize();
 		}
 
 		return value_change;
@@ -120,7 +101,7 @@ public:
 	
 
 
-	void forgot(const std::size_t& number) {																	// delete old memory and shift the new memory
+	void fogot(const std::size_t& number) {																	// delete old memory and shift the new memory
 		int h = number;
 		if (number > v.size())
 			h = v.size();
@@ -132,8 +113,8 @@ public:
 		}
 	}
 
-	void forgot_all() {																						// delete all memory
-		forgot(v.size());
+	void fogot_all() {																						// delete all memory
+		fogot(v.size());
 	}
 
 
@@ -160,9 +141,9 @@ public:
 
 
 	void reconstruct(const std::size_t& size, const std::size_t& next,
-		std::function<Matrix<double>(const Matrix<double>&)> _act_func = sigmoid_func,
-		std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dact_func = dsigmoid_func) {
-		forgot_all();
+		nvstd::function<Matrix<double>(const Matrix<double>&)> _act_func = sigmoid_func,
+		nvstd::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dact_func = dsigmoid_func) {
+		fogot_all();
 
 		value.reconstruct(size, 1);
 		weight.reconstruct(next, size);
@@ -173,7 +154,7 @@ public:
 	}
 
 	void reconstruct(const LayerId& set,const size_t& next) {
-		forgot_all();
+		fogot_all();
 
 		value.reconstruct(set.Layer_size, 1);
 		weight.reconstruct(next, set.Layer_size);
@@ -191,114 +172,114 @@ public:
 		if (!weight.is_constructed())
 			throw "cant set undefined weight value";
 
-		for (int i = 0; i < weight.get_row(); i++) {
-			for (int j = 0; j < weight.get_column(); j++) {
-				weight[i][j] = mapping(rand() % 10000, 0, 10000, min, max);
-			}
-		}
+		double* r = new double[weight.get_size()];
+		for(int i = 0 ;i<weight.get_size();i++)
+			r[i] = mapping(rand() % 10000, 0, 10000, min, max);
+		cudaMemcpy(weight.get_value(), r, weight.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] r;
 	}
 
 	void rand_weight(std::pair<const double&, const double&> setting) {
 		if (!weight.is_constructed())
 			throw "cant set undefined weight value";
 
-		for (int i = 0; i < weight.get_row(); i++){
-			for (int j = 0; j < weight.get_column(); j++) {
-				weight[i][j] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-			}
-		}
+		double* r = new double[weight.get_size()];
+		for(int i = 0 ;i<weight.get_size();i++)
+			r[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+		cudaMemcpy(weight.get_value(), r, weight.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] r;
 	}
 
 	void rand_weight(std::function<double()> func) {
 		if (!weight.is_constructed())
 			throw "cant set undefined weight value";
 
-		for (int i = 0; i < weight.get_row(); i++) {
-			for (int j = 0; j < weight.get_column(); j++) {
-				weight[i][j] = func();
-			}
-		}
+		double* r = new double[weight.get_size()];
+		for(int i = 0;i<weight.get_size();i++)
+			r[i] = func();
+		cudaMemcpy(weight.get_value(), r, weight.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] r;
 	}
 
 	void rand_weight(std::function<double(std::size_t,std::size_t)> func,std::size_t next) {
 		if (!weight.is_constructed())
 			throw "cant set undefined weight value";
 
-		for (int i = 0; i < weight.get_row(); i++) {
-			for (int j = 0; j < weight.get_column(); j++) {
-				weight[i][j] = func(value.get_row(), next);
-			}
-		}
+		double* r = new double[weight.get_size()];
+		for (int i = 0; i < weight.get_size(); i++)
+			r[i] = func(value.get_row(), next);
+		cudaMemcpy(weight.get_value(), r, weight.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] r;
 	}
 
 	void rand_bias(const double& min, const double& max) {
 		if (!bias.is_constructed())
 			throw "cant set undefined bias value";
 
-		for (int i = 0; i < bias.get_row(); i++) {
-			bias[i][0] = mapping(rand() % 10000, 0, 10000, min, max);
-		}
+		double* r = new double[bias.get_size()];
+		for (int i = 0; i < bias.get_size();i++)
+			r[i] = mapping(rand() % 10000, 0, 10000, min, max);
+		cudaMemcpy(bias.get_value(), r, bias.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] r;
 	}
 
 	void rand_bias(std::pair<const double&, const double&> setting) {
 		if (!bias.is_constructed())
 			throw "cant set undefined bias value";
 
-		for (int i = 0; i < bias.get_row(); i++) {
-			bias[i][0] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-		}
+		double* r = new double[bias.get_size()];
+		for (int i = 0; i < bias.get_size(); i++) 
+			r[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
+		cudaMemcpy(bias.get_value(), r, bias.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] r;
 	}
 
 	void rand_bias(std::function<double()> func) {
 		if (!bias.is_constructed())
 			throw "cant set undefined bias value";
 
-		for (int i = 0; i < bias.get_row(); i++) {
-			bias[i][0] = func();
-		}
+		double* r = new double[bias.get_size()];
+		for(int i =0 ;i<bias.get_size();i++)
+			r[i] = func();
+		cudaMemcpy(bias.get_value(), r, bias.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] r;
 	}
 
 	void rand_bias(std::function<double(std::size_t,std::size_t)> func,std::size_t next) {
 		if (!bias.is_constructed())
 			throw "cant set undefined bias value";
 
-		for (int i = 0; i < bias.get_row(); i++) {
-			bias[i][0] = func(value.get_row(), next);
-		}
+		double* r = new double[bias.get_size()];
+		for (int i = 0; i < bias.get_size();i++)
+			r[i] = func(value.get_row(), next);
+		cudaMemcpy(bias.get_value(), r, bias.get_sizeb(), cudaMemcpyHostToDevice);
+		delete[] r;
 	}
 
 
 
 	void print_weight() {
 		std::cout << "---------Dense Layer----------\n";
-		for (int i = 0; i < weight.get_row(); i++) {
-			for (int j = 0; j < weight.get_column(); j++) {
-				std::cout << weight[i][j] << "    \t";
-			}std::cout << std::endl;
-		}
+		weight.print();
 	}
 
 	void print_value() {
 		std::cout << "---------Dense Layer----------\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			std::cout << value[i][0] << "    \t";
-		}std::cout << std::endl;
+		value.print();
 	}
 
 	void print_bias(){
 		std::cout << "---------Dense Layer---------\n";
-		for (int i = 0; i < bias.get_row(); i++) {
-			std::cout << bias[i][0] << "    \t";
-		}std::cout << std::endl;
+		bias.print();
 	}
 
 
 
-	std::function<Matrix<double>(const Matrix<double>&)> get_act_func() {
+	nvstd::function<Matrix<double>(const Matrix<double>&)> get_act_func() {
 		return act_func;
 	}
 
-	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dact_func() {
+	nvstd::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> get_dact_func() {
 		return dact_func;
 	}
 	
