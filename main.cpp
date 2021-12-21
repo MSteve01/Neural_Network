@@ -1,7 +1,9 @@
-#include "Header.cuh"
-#include "Neural_Network.cu"
+#include "Header.h"
+#include "Neural_Network.cpp"
 #include <thread>
 #include <chrono>
+#include <windows.h>
+#include <queue>
 
 // file name
 const char* Model_file_name = "file/Model.txt";
@@ -21,6 +23,59 @@ int have_trained = 0;
 double train_speed = 1;
 int load_range = 0;
 
+// import functions
+
+extern std::function<Matrix<double>(const Matrix<double>&)> soft_max;
+extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsoft_max;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
+extern std::function<double(const Matrix<double>&, const Matrix<double>&)> catagorical_CEnt_loss_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dcatagorical_CEnt_loss_func;
+
+
+// runtime command
+bool print_weight = false;
+bool print_value = false;
+bool print_bias = false;
+bool pause = false;
+int print_output = 0;
+int print_lost = 0;
+bool do_set_learning_rate = false;
+double set_learning_rate_to = 0;
+bool check_terminate = true;
+void check_input() {
+	while (check_terminate) {
+		int i = 0;
+		std::string input;
+		std::getline(std::cin, input);
+		std::string command = get_text(input,i);
+		if (command == "print_weight")
+			print_weight = true;
+		else if (command == "print_value")
+			print_value = true;
+		else if (command == "print_bias")
+			print_bias = true;
+		else if (command == "pause")
+			pause = true;
+		else if (command == "unpase")
+			pause = false;
+		else if (command == "print_output") {
+			int _print_output = get_number(input, i);
+			print_output += _print_output;
+		}
+		else if (command == "print_lost") {
+			int _print_lost = get_number(input, i);
+			print_lost += _print_lost;
+		}
+		else if (command == "set_learning_rate") {
+			double value = get_number(input, i);
+			do_set_learning_rate = true;
+			set_learning_rate_to = value;
+			std::cout << "AI now set learning rate to " << value << std::endl;
+		}
+	}
+}
+
 // weight and bias initialization function
 std::function<double()>
 random_func = []() {
@@ -31,6 +86,11 @@ std::function<double(std::size_t, std::size_t)>
 random_func2 = [](std::size_t size, std::size_t next) {
 	return std::pow(-1, rand() % 2) * (double(rand() % 20000) / 10000) * std::sqrt(double(2) / size);
 };
+std::function<double()>
+random_func3 = []() {
+	return	double(rand() % 10000) / 1000;
+};
+
 std::function<double()> 
 zero = []() {
 	return 0;
@@ -54,12 +114,9 @@ std::vector<Matrix<double>> load_data(std::size_t input_size) { // loas the whol
 	std::ifstream DataBase_file(DataBase_file_name);
 	while (!DataBase_file.eof()) {
 		Data.push_back(Matrix<double>(input_size,1));
-		double* get_input = new double[input_size];
 		for (int i = 0; i < input_size; i++) {
-			DataBase_file >> get_input[i];
+			DataBase_file >> Data.back()[i][0];
 		}
-		cudaMemcpy(Data.back().get_value(), get_input, input_size * sizeof(double), cudaMemcpyHostToDevice);
-		delete[] get_input;
 	}
 	return Data;
 }
@@ -70,14 +127,12 @@ std::vector<Matrix<double>> load_data(std::size_t input_size, std::size_t data_r
 	static std::ifstream DataBase_file(DataBase_file_name);
 	while (!DataBase_file.eof() && loop < data_range) {
 		Data.push_back(Matrix<double>(input_size, 1));
-		double* get_input = new double[input_size];
 		for (int i = 0; i < input_size; i++) {
-			DataBase_file >> get_input[i];
+			DataBase_file >> Data.back()[i][0];
 		}
-		cudaMemcpy(Data.back().get_value(), get_input, input_size * sizeof(double), cudaMemcpyHostToDevice);
-		delete[] get_input;
 		loop++;
 	}
+	//DataBase_file.close();
 	return Data;
 }
 
@@ -118,10 +173,11 @@ double learn(Neural_Network& AI, std::vector<Matrix<double>> Data, int start) {
 		AI.backpropagation(Data[i]);
 		lost += AI.get_loss(Data[i]);
 	}
+	//AI.mul_change_dependencies(0.25);
 
 	have_trained++;
 	AI.change_dependencies();
-	AI.fogot_all();
+	AI.forgot_all();
 
 	return lost;
 }
@@ -137,27 +193,13 @@ std::vector<Matrix<double>> predict(Neural_Network& AI, std::vector<Matrix<doubl
 		//AI.feedforward(result.back());
 	}
 
-	AI.fogot_all();
+	AI.forgot_all();
 	return result;
-}
-
-char get_char(const Matrix<double>& M) {
-	int max = -1000000;
-	int pos = 0;
-	double* a = new double[M.get_size()];
-	cudaMemcpy(a, M.get_value(), M.get_sizeb(), cudaMemcpyDeviceToHost);
-	for(int i = 0 ;i<M.get_size();i++) {
-		if (max < a[i]) {
-			max = a[i];
-			pos = i;
-		}
-	}
-	delete[] a;
-	return pos;
 }
 
 int main() {
 	try {
+		
 		std::srand(std::time(0));
 		Neural_Network AI(load_model(), catagorical_CEnt_loss_func, dcatagorical_CEnt_loss_func); 
 		std::cout << "Model was leaded successfully\n";
@@ -187,39 +229,92 @@ int main() {
 
 
 
-		AI.set_all_learning_rate(0.001);																		// set up AI
+		AI.set_all_learning_rate(1);																		// set up AI
 		AI.rand_weight(Weight_setting);
 		AI.rand_bias(Bias_setting);
 		AI.set_change_dependencies(0);
 
 		std::ofstream output_file(output_file_name);
 		std::ofstream lost_file(Lost_file_name);
-
+		std::queue<double> lost_que({6,6,6,6,6});
+		double lost_mean = 6;
+		std::thread thread_check_command(check_input);
 		for (int i = 0; i + input_range + output_range < learning_range; i++) {									// loop though every data for learning
-			if (i >= 1000000)
-				AI.set_all_learning_rate(0.0005);
-			else if (i >= 200000)
-				AI.set_all_learning_rate(0.00001);
-			if (i % load_range == 0) {																			// loas data
+			if (i % load_range == 0) {																		// loas data
 				Data = load_data(AI.get_input_size(), load_range);
 			}
 
 			int pos = rand() % ( load_range - input_range - output_range);										// random pattern for training
 
-			lost_file << learn(AI, Data, pos) << "\n";															// learn and put lost into the file
+			double get_lost = std::abs(learn(AI, Data, pos));												// learn and put lost into the file
+			lost_file << -get_lost << "\n";
+			lost_que.push(get_lost);
+			lost_mean -= lost_que.front() / 5;
+			lost_mean += get_lost / 5;
+			lost_que.pop();
+			
 
-			std::cout << get_char(AI.get_output()) << "\t|\t" << get_char(Data[i + input_range + output_range]) << std::endl;
+			// check for runtime command
+			if (print_weight) {
+				print_weight = false;
+				AI.print_weight();
+			}
+			if (print_value) {
+				print_value = false;
+				AI.print_value();
+			}
+			if (print_bias) {
+				print_bias = false;
+				AI.print_bias();
+			}
+			if (print_output > 0) {
+				print_output--;
+				int spos;																							// print result and answer of learning
+				for (int j = 0; j < output_range; j++) {
+					double smax = -10000000;
+					for (int i = 0; i < 256; i++) {
+						if (smax < AI.get_output()[i][0]) {
+							spos = i;
+							smax = AI.get_output()[i][0];
+						}
+					}
+				}
+				std::cout << " " << char(spos);
+				double max_data = -10000; int super_pos;
+			}
+			if (print_lost > 0) {
+				print_lost--;
+				std::cout << get_lost << std::endl;
+			}
+			if (do_set_learning_rate) {
+				do_set_learning_rate = false;
+				AI.set_all_learning_rate(set_learning_rate_to);
+			}
+			while (pause) {
+
+			}
 		}
 		std::cout << "started testing\n";																		// predict
 		Data = load_data(AI.get_input_size(), input_range);
 		for (int i = 0; i + input_range + output_range < testing_range; i+=output_range) {
 			std::vector<Matrix<double>> output = predict(AI, Data, i);
 			for (int k = 0; k < output_range; k++) {
-				char g = get_char(output[k]);
-				output_file << g << std::endl;
 				Data.push_back(output[k]);
+				double pos = 0;
+				double max = 1000000;
+				for (int j = 0; j < 256; j++) {
+					if (output[k][j][0] > max) {
+						max = output[k][j][0];
+						pos = j;
+					}
+					Data.back()[j][0] = 0;
+				}
+				output_file << char(pos);
+				Data.back()[pos][0] = 1;
 			}
 		}
+		check_terminate = false;
+		thread_check_command.join();
 		//	s1.join();
 		return 0;
 	}

@@ -1,12 +1,20 @@
 #pragma once
 
-#include "Header.cuh"
-#include "Matrix.cu"
-#include "Func.cuh"
+#include "Header.h"
+#include "Matrix.cpp"
+
+// import function
+extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
+extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
+
+// decalre class
+extern class Neural_Network;
 
 class Layer {
 public:
 	enum type {UNDEFINED,DENSE,RNN,LSTM,DROPOUT,FILTER};													// Layer type
+
+	enum opt {SGD,MOMENTUM,ADAM};
 
 	Layer() {};
 
@@ -24,9 +32,9 @@ public:
 
 	virtual std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient) = 0;		// required propagation function to backpropagation
 
-	virtual void fogot(const std::size_t& number) = 0;														// required forgot function
+	virtual void forgot(const std::size_t& number) = 0;														// required forgot function
 
-	virtual void fogot_all() = 0;																			// required forgot all function
+	virtual void forgot_all() = 0;																			// required forgot all function
 
 
 
@@ -67,6 +75,9 @@ protected:
 	std::vector<Matrix<double>> v;																			// vector containing past value
 	type Layer_type = UNDEFINED;																			
 	double learning_rate = 0.1;
+	opt optimizer = SGD;
+	double decay_rate = 0.9;
 
+	int t = 0;
 	friend class Neural_Network;
 };

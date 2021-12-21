@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Header.cuh"
-#include "Layer.cu"
+#include "Header.h"
+#include "Layer.cpp"
 
 class LayerId {	// this class is used as API to set the layer setting
 public:
