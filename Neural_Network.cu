@@ -1,11 +1,11 @@
 #pragma once
 
-#include "Header.h"
-#include "Dense.cpp"
-#include "LSTM.cpp"
-#include "LayerId.cpp"
-#include "DropOut.cpp"
-#include "Filter.cpp"
+#include "Header.cuh"
+#include "Dense.cu"
+#include "LSTM.cu"
+#include "LayerId.cu"
+#include "DropOut.cu"
+#include "Filter.cu"
 
 class Neural_Network {
 public:
@@ -114,10 +114,10 @@ public:
 			throw "Invalid random weight value";
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->Layer_type == Layer::DENSE) {
-				static_cast<Dense*>(layer[i])->rand_weight(setting[i], layer[i + 1]->value.get_row());
+				static_cast<Dense*>(layer[i])->rand_weight(setting[i], layer[i + 1]->value.row);
 			}
 			else if (layer[i]->Layer_type == Layer::LSTM) {
-				static_cast<LSTM*>(layer[i])->rand_weight(setting[i], layer[i + 1]->value.get_row());
+				static_cast<LSTM*>(layer[i])->rand_weight(setting[i], layer[i + 1]->value.row);
 			}
 			else if (layer[i]->Layer_type == Layer::DROPOUT) {
 				;// dropout layer dont have weight
@@ -171,10 +171,10 @@ public:
 			throw "invalid random bias value";
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->Layer_type == Layer::DENSE) {
-				static_cast<Dense*>(layer[i])->rand_bias(setting[i], layer[i + 1]->value.get_row());
+				static_cast<Dense*>(layer[i])->rand_bias(setting[i], layer[i + 1]->value.row);
 			}
 			else if (layer[i]->Layer_type == Layer::LSTM) {
-				static_cast<LSTM*>(layer[i])->rand_bias(setting[i], layer[i + 1]->value.get_row());
+				static_cast<LSTM*>(layer[i])->rand_bias(setting[i], layer[i + 1]->value.row);
 			}
 			else if (layer[i]->Layer_type == Layer::DROPOUT) {
 				;// dropout layer dont have bias
@@ -232,7 +232,7 @@ public:
 
 
 	Matrix<double> feedforward(Matrix<double> input) { 
-		if (input.get_row() != layer[0]->get_size() || input.get_column() != 1)
+		if (input.row != layer[0]->get_size() || input.column != 1)
 			throw "invalid input Matrix";
 
 		layer[0]->set_value(input);																			// set input into the first layer
@@ -240,11 +240,11 @@ public:
 		for (int i = 1; i < layer.size(); i++) {															// loop though every layer
 			layer[i]->set_value(layer[i - 1]->feed());														// get output from previous layer then set into the next layer
 		}
-		return static_cast<Dense*>(layer.back())->get_value();												// get output from last layer
+		return static_cast<Dense*>(layer.back())->value;												// get output from last layer
 	}
 
 	void backpropagation(Matrix<double> target) {
-		Matrix<double> output = static_cast<Dense*>(layer.back())->get_value();								// get output form last layer
+		Matrix<double> output = static_cast<Dense*>(layer.back())->value;								// get output form last layer
 
 		std::vector<Matrix<double>> error;
 		error.push_back(dloss_func(output, target));														// compute the gadient from output and target value
@@ -256,21 +256,21 @@ public:
 
 
 
-	void forgot(const std::size_t& number) {																	// delete the past value memory
+	void fogot(const std::size_t& number) {																	// delete the past value memory
 		for (int i = 0; i < layer.size() - 1; i++) {
 			if (layer[i]->get_type() == Layer::DENSE)
-				static_cast<Dense*>(layer[i])->forgot(number);
+				static_cast<Dense*>(layer[i])->fogot(number);
 			else if (layer[i]->get_type() == Layer::LSTM)
-				static_cast<LSTM*>(layer[i])->forgot(number);
+				static_cast<LSTM*>(layer[i])->fogot(number);
 			else if (layer[i]->get_type() == Layer::DROPOUT)
-				static_cast<DropOut*>(layer[i])->forgot(number);
+				static_cast<DropOut*>(layer[i])->fogot(number);
 			else if (layer[i]->get_type() == Layer::FILTER)
-				static_cast<Filter*>(layer[i])-> forgot(number);
+				static_cast<Filter*>(layer[i])-> fogot(number);
 		}
 	}
 
-	void forgot_all() {																						// call forgot function with memory lenght
-		forgot(layer[0]->v.size());
+	void fogot_all() {																						// call fogot function with memory lenght
+		fogot(layer[0]->v.size());
 	}
 
 

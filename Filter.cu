@@ -1,29 +1,9 @@
 #pragma once
-#include "Header.h"
-#include "Layer.cpp"
-#include "LayerId.cpp"
+#include "Header.cuh"
+#include "Layer.cu"
+#include "LayerId.cu"
 
-// import functions
-extern std::function<Matrix<double>(const Matrix<double>&)> sigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> tanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> linear_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> descale_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> ReLU_func;
-extern std::function<Matrix<double>(const Matrix<double>&)> leakReLU_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dsigmoid_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dtanh_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dlinear_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> ddescale_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dReLU_func;
-extern std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dleakReLU_func;
-
-// declare functions
-double mapping(const double& value, const double& min1, const double& max1, const double& min2, const double& max2);
-void set_Matrix(Matrix<double>& M, double value);
-Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
-void universal_set_func(std::function<Matrix<double>(const Matrix<double>&)>& func, const std::string& setting, int& i);
-void universal_set_func(std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)>& func, const std::string& setting, int& i);
-std::string get_text(const std::string& str, int& i);
+#include "Func.cuh"
 
 
 
@@ -59,21 +39,21 @@ public:
 		return func(value);																					// return output
 	}
 
-	std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gadient) {					// backpropagation
-		int start_pos = v.size() - gadient.size();															// rearrange the gadient In case givven gadient is shorter than memory
+	std::vector<Matrix<double>> propagation(const std::vector<Matrix<double>>& gradient) {					// backpropagation
+		int start_pos = v.size() - gradient.size();															// rearrange the gradient In case givven gradient is shorter than memory
 
-		std::vector<Matrix<double>> result;																	// flow gadient
+		std::vector<Matrix<double>> result;																	// flow gradient
 
-		for (int round = 0; round < gadient.size(); round++) {												// loop though every time step
-			result.push_back(Matrix<double>(value.get_row(), 1));
-			result.back() = dfunc(v[round + start_pos], gadient[round]);									// compute gadient
+		for (int round = 0; round < gradient.size(); round++) {												// loop though every time step
+			result.push_back(Matrix<double>(value.row, 1));
+			result.back() = dfunc(v[round + start_pos], gradient[round]);									// compute gradient
 		}
 		return result;
 	}
 
 
 
-	void forgot(const std::size_t& number) {																	// delete old memory and shift the new memory
+	void fogot(const std::size_t& number) {																	// delete old memory and shift the new memory
 		int h = number;
 		if (number > v.size())
 			h = v.size();
@@ -85,8 +65,8 @@ public:
 		}
 	}
 
-	void forgot_all() {																						// delete all memory
-		forgot(v.size());
+	void fogot_all() {																						// delete all memory
+		fogot(v.size());
 	}
 
 
@@ -108,7 +88,7 @@ public:
 	void reconstruct(const std::size_t& size,
 	std::function<Matrix<double>(const Matrix<double>&)> _func,
 	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> _dfunc) {
-		forgot_all();
+		fogot_all();
 		
 		value.reconstruct(size, 1);
 		
@@ -117,7 +97,7 @@ public:
 	}
 
 	void reconstruct(const LayerId& set) {
-		forgot_all();
+		fogot_all();
 		
 		value.reconstruct(set.Layer_size, 1);
 
@@ -165,9 +145,7 @@ public:
 
 	void print_value() {
 		std::cout << "---------Filter Layer----------\n";
-		for (int i = 0; i < value.get_row(); i++) {
-			std::cout << value[i][0] << "    \t";
-		}std::cout << std::endl;
+		value.print();
 	}
 private:
 	void set_Layer(const std::string& setting) {															// set layer using command
