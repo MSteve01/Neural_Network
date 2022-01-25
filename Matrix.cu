@@ -55,6 +55,14 @@ __global__ void thread_number_devide(t* result, const t* lhs, const t number, co
 	result[row * _column + column] = lhs[row * _column + column] / number;
 }
 
+template<typename t>
+__global__ void thread_number_plus(t* result, const t* M,const t p, const int size) {
+	int i = threadIdx.x + blockIdx.x * blockDim.x;
+	if (i < size) {
+		result[i] = M[i] + p;
+	}
+}
+
 template <typename t>
 __global__ void set_zero(t* value, const int _i, const int _j) {
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
@@ -149,9 +157,19 @@ public:
 		dim3 blockPergrid(x_b, y_b);
 		dim3 threadPerblock(x_t, y_t);
 		thread_matrix_plus << <blockPergrid, threadPerblock >> > (result.value, value, rhs.value, row, column);
+		cudaDeviceSynchronize();
 		return result;
 	}
 
+	Matrix<t> operator+(const t& rhs) {
+		Matrix<t> result(row, column);
+		int blockPergrid = upper_value(double(result.get_size()) / 1024);
+		int threadPerblock = std::min(result.get_size(), 1024);
+		thread_number_plus << <blockPergrid, threadPerblock >> > (result.value, value, rhs, result.get_size());
+		cudaDeviceSynchronize();
+		return result;
+	}
+	
 	Matrix<t> operator-(const Matrix<t>& rhs) {
 		if (row != rhs.row || column != rhs.column)
 			throw "Illegal Matrix subtract(size are not equal)";

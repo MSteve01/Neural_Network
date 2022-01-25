@@ -78,12 +78,12 @@ public:
 			int size = weight.get_size();
 			int blockPergrid = upper_value(double(size) / 1024);
 			int threadPerblock = std::min(size, 1024);
-			device_weightchange_computeDENSE << <blockPergrid, threadPerblock >> > (weight_change.value, doutput[round].value, v[round].value, doutput[round].row, value.row, learning_rate);
+			device_weightchange_computeDENSE << <blockPergrid, threadPerblock >> > (weight_change.value, doutput[round].value, v[round].value, doutput[round].row, value.row);
 			cudaDeviceSynchronize();
 		}
 
 		for (int round = 0; round < gradient.size(); round++) {												// loop though each time step
-			bias_change = bias_change + (doutput[round] * learning_rate);
+			bias_change = bias_change + doutput[round];
 		}
 
 		for (int round = 0; round < gradient.size(); round++) {												// loop though each time step
@@ -120,8 +120,36 @@ public:
 
 
 	void change_dependencies() {																			// change weight and bias
-		weight = weight + weight_change;
-		bias = bias + bias_change;
+		++t;
+		if (optimizer == SGD) {
+			weight = weight + weight_change * learning_rate;
+			bias = bias + bias_change * learning_rate;
+		}
+		else if (optimizer == MOMENTUM) {
+			set_up_Matrix(s_weight_change, weight);
+			set_up_Matrix(s_bias_change, bias);
+
+			s_weight_change = s_weight_change * decay_rate + weight_change * (double(1) - decay_rate);
+			s_bias_change = s_bias_change * decay_rate + bias_change * (double(1) - decay_rate);
+
+			weight = weight + s_weight_change * learning_rate;
+			bias = bias + bias_change * learning_rate;
+		}
+		else if (optimizer == ADAM) {
+			set_up_Matrix(s_weight_change, weight);
+			set_up_Matrix(s_bias_change, bias);
+			set_up_Matrix(ss_weight_change, weight);
+			set_up_Matrix(ss_bias_change, bias);
+
+			s_weight_change = s_weight_change * decay_rate + weight_change * (double(1) - decay_rate);
+			s_bias_change = s_bias_change * decay_rate + bias_change * (double(1) - decay_rate);
+
+			ss_weight_change = ss_weight_change * decay_rate + mul_each(weight_change, weight_change) * (double(1) - decay_rate);
+			ss_bias_change = ss_bias_change * decay_rate + mul_each(bias_change, bias_change) * (double(1) - decay_rate);
+
+			weight = weight + devide_each(s_weight_change * learning_rate, (pow_each(ss_weight_change, 0.5) + 0.000001));
+			bias = bias + devide_each(s_bias_change * learning_rate, (pow_each(ss_bias_change, 0.5) + 0.000001));
+		}
 	}
 
 	void set_change_dependencies(const double& value) {														// set changing weight and chaing bias to specifc value
@@ -297,10 +325,32 @@ private:
 				universal_set_func(dact_func, setting, i);
 			else if (command == "learning_rate")
 				set_learning_rate(setting, i);
+			else if (command == "opt")
+				set_optimizer(setting, i);
+			else if (command == "decay_rate")
+				set_decay_rate(setting, i);
 			else if (command == "")
 				;
 			else throw "command not found";
 		}
+	}
+
+	void set_decay_rate(const std::string& str, int& i) {
+		double a = get_number(str, i);
+		decay_rate = a;
+	}
+
+	void set_optimizer(const std::string& str, int& i) {
+		std::string _opt = get_text(str, i);
+		if (_opt == "SGD")
+			optimizer = Layer::SGD;
+		else if (_opt == "MOMENTUM")
+			optimizer = Layer::MOMENTUM;
+		else if (_opt == "ADAM")
+			optimizer = Layer::ADAM;
+		else if (_opt == "")
+			;
+		else throw "optimizer not found";
 	}
 
 	void set_learning_rate(const std::string& str, int& i) {
@@ -315,6 +365,12 @@ private:
 
 	Matrix<double> weight;																					// containing weight
 	Matrix<double> bias;																					// containing bias
+
+	Matrix<double> s_weight_change;
+	Matrix<double> s_bias_change;
+
+	Matrix<double> ss_weight_change;
+	Matrix<double> ss_bias_change;
 
 	std::function<Matrix<double>(const Matrix<double>&)> act_func;											// activate function
 	std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> dact_func;					// derivatives of activate function

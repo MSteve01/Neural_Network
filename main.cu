@@ -7,7 +7,7 @@
 
 // file name
 const char* Model_file_name = "file/Model.txt";
-const char* DataBase_file_name = "file/Data.txt";
+const char* DataBase_file_name = "file/Data2.txt";
 const char* output_file_name = "file/Output.txt";
 const char* RandWeightSetting_file_name = "file/Rand_weight_setting.txt";
 const char* RandBiasSetting_file_name = "file/Rand_bias_setting.txt";
@@ -22,6 +22,8 @@ int output_range;
 int have_trained = 0;
 double train_speed = 1;
 int load_range = 0;
+int batch = 1;
+int batch_count = 0;
 
 
 //runtime command
@@ -64,11 +66,21 @@ void check_input() {
 			set_learning_rate_to = value;
 			std::cout << "AI now set learning rate to " << value << std::endl;
 		}
+		else if (command == "set_batch") {
+			int  value = get_number(input, i);
+			batch = value;
+			std::cout << "set batch to : " << value << std::endl;
+		}
 	}
 }
 
 
 // weight and bias initialization function
+std::function<double(std::size_t, std::size_t)>
+n_random_func = [](std::size_t size, std::size_t next) {
+	//return std::pow(-1, rand() % 2) * double(rand() % 20000) / 20000;
+	return std::pow(-1, rand() % 2) *  double(rand() % 30000) / 10000;
+};
 std::function<double()>
 random_func = []() {
 	//return std::pow(-1, rand() % 2) * double(rand() % 20000) / 20000;
@@ -160,14 +172,18 @@ double learn(Neural_Network& AI, std::vector<Matrix<double>> Data, int start) {
 		AI.feedforward(Data[i]);
 	}
 
-	AI.mul_change_dependencies(0);
+	
 	for (int i = start + input_range; i < start + input_range + output_range; i++) {							// backpropagation
 		AI.backpropagation(Data[i]);
 		lost += AI.get_loss(Data[i]);
 	}
 
 	have_trained++;
-	AI.change_dependencies();
+	if (++batch_count >= batch) {
+		AI.change_dependencies();
+		AI.mul_change_dependencies(0);
+		batch_count = 0;
+	}
 	AI.fogot_all();
 
 	return lost;
@@ -221,6 +237,7 @@ int main() {
 		testing_range = data_range - learning_range;
 		
 		std::vector<std::function<double(std::size_t, std::size_t)>> Weight_setting; 
+		//Weight_setting.push_back(n_random_func);
 		for (int i = 0; i < AI.get_layer_size() - 1; i++) { Weight_setting.push_back(random_func2); }
 		std::cout << "Load rand weigth setting successfully\n";
 		std::vector<std::function<double()>> Bias_setting;
@@ -279,7 +296,13 @@ int main() {
 			}
 			if (print_output > 0) {
 				print_output--;
-				std::cout << get_char(AI.get_output()) << "\t|\t" << get_char(Data[pos + input_range + output_range]) << std::endl;
+				char predict = get_char(AI.get_output());
+				char answer = get_char(Data[pos + input_range + output_range - 1]);
+				if(predict == answer)
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 240);
+				std::cout << predict  << "\t|\t" << answer << std::endl;
+				if(predict == answer)
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 15);
 			}
 			if (print_lost > 0) {
 				print_lost--;
@@ -293,6 +316,7 @@ int main() {
 
 			}
 		}
+		check_terminate = false;
 		runtime.join();
 
 		std::cout << "started testing\n";																		// predict
@@ -301,7 +325,7 @@ int main() {
 			std::vector<Matrix<double>> output = predict(AI, Data, i);
 			for (int k = 0; k < output_range; k++) {
 				char g = get_char(output[k]);
-				output_file << g << std::endl;
+				output_file << g;
 				Data.push_back(output[k]);
 			}
 		}

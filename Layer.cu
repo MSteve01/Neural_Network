@@ -8,6 +8,8 @@ class Layer {
 public:
 	enum type {UNDEFINED,DENSE,RNN,LSTM,DROPOUT,FILTER};													// Layer type
 
+	enum opt { SGD, MOMENTUM, ADAM };
+
 	Layer() {};
 
 	Layer(const type& _Layer_type,const std::size_t& size,const double& _learning_rate = 0.1) {
@@ -67,6 +69,11 @@ protected:
 	std::vector<Matrix<double>> v;																			// vector containing past value
 	type Layer_type = UNDEFINED;																			
 	double learning_rate = 0.1;
+
+	opt optimizer = SGD;
+	double decay_rate = 0.9;
+
+	int t = 0;
 
 	friend class Neural_Network;
 };

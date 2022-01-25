@@ -177,54 +177,57 @@ public:
 			set_Matrix(next_dc, 0);
 			set_Matrix(next_dh, 0);
 
-			Matrix<double> input_gate = Iact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias);		// compute input gate
-			Matrix<double> fogot_gate = Fact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias);		// compute forgot gate
-			Matrix<double> output_gate = Oact_func((xO_weight * value) + (hO_weight * h[round]) + Obias);		// comput output gate
-			Matrix<double> K = Kact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias);
+			Matrix<double> input_gate = Iact_func((xI_weight * v[round]) + (hI_weight * h[round]) + Ibias);		// compute input gate
+			Matrix<double> fogot_gate = Fact_func((xF_weight * v[round]) + (hF_weight * h[round]) + Fbias);		// compute forgot gate
+			Matrix<double> output_gate = Oact_func((xO_weight * v[round]) + (hO_weight * h[round]) + Obias);		// comput output gate
+			Matrix<double> K = Kact_func((xK_weight * v[round]) + (hK_weight * h[round]) + Kbias);
 
 			dh = dh + _gradient[round];																			// add up output error
 			dc = dc + mul_each(dh, output_gate);																// add up cell state error
 
-			Matrix<double> dinput_gate = dIact_func((xI_weight * value) + (hI_weight * h[round]) + Ibias, mul_each(dc, K));// derivative of input gate
-			Matrix<double> dfogot_gate = dFact_func((xF_weight * value) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));// derivative of forgot gate
-			Matrix<double> doutput_gate = dOact_func((xO_weight * value) + (hO_weight * h[round]) + Obias, mul_each(dh, c[round + 1]));// derivative of output
-			Matrix<double> dK = dKact_func((xK_weight * value) + (hK_weight * h[round]) + Kbias, mul_each(dc, input_gate));
+			Matrix<double> dinput_gate = dIact_func((xI_weight * v[round]) + (hI_weight * h[round]) + Ibias, mul_each(dc, K));// derivative of input gate
+			Matrix<double> dfogot_gate = dFact_func((xF_weight * v[round]) + (hF_weight * h[round]) + Fbias, mul_each(dc, c[round]));// derivative of forgot gate
+			Matrix<double> doutput_gate = dOact_func((xO_weight * v[round]) + (hO_weight * h[round]) + Obias, mul_each(dh, c[round + 1]));// derivative of output
+			Matrix<double> dK = dKact_func((xK_weight * v[round]) + (hK_weight * h[round]) + Kbias, mul_each(dc, input_gate));
 
 
-			int blockPergrid = upper_value(double(value.get_size()) / 1024);
-			int threadPerblock = std::min(value.get_size(), 1024);
+			int blockPergrid = upper_value(double(value.get_size() * value.get_size()) / 1024);
+			int threadPerblock = std::min(value.get_size() * value.get_size(), 1024);
 
-			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xO_weight_change.value, doutput_gate.value, v[round].value, xO_weight_change.row, xO_weight_change.column, learning_rate);
-			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hO_weight_change.value, doutput_gate.value, h[round].value, hO_weight_change.row, hO_weight_change.column, learning_rate);
-			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xI_weight_change.value, dinput_gate.value, v[round].value, xI_weight_change.row, xI_weight_change.column, learning_rate);
-			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hI_weight_change.value, dinput_gate.value, h[round].value, hI_weight_change.row, hI_weight_change.column, learning_rate);
-			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xF_weight_change.value, dfogot_gate.value, v[round].value, xF_weight_change.row, xF_weight_change.column, learning_rate);
-			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hF_weight_change.value, dfogot_gate.value, h[round].value, hF_weight_change.row, hF_weight_change.column, learning_rate);
-			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xK_weight_change.value, dK.value, v[round].value, xK_weight_change.row, xK_weight_change.column, learning_rate);
-			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hK_weight_change.value, dK.value, h[round].value, hK_weight_change.row, hK_weight_change.column, learning_rate);
-			cudaDeviceSynchronize();
-
-			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (next_dh.value, doutput_gate.value, hO_weight_change.value, hO_weight_change.row, hO_weight_change.column);
-			cudaDeviceSynchronize();
-			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (next_dh.value, dinput_gate.value, hI_weight_change.value, hI_weight_change.row, hI_weight_change.column);
-			cudaDeviceSynchronize();
-			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (next_dh.value, dfogot_gate.value, hF_weight_change.value, hF_weight_change.row, hF_weight_change.column);
-			cudaDeviceSynchronize();
-			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (next_dh.value, dK.value, hK_weight_change.value, hK_weight_change.row, hK_weight_change.column);
-			cudaDeviceSynchronize();
-			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (flow_gradient[round].value, doutput_gate.value, xO_weight_change.value, xO_weight_change.row, hO_weight_change.column);
-			cudaDeviceSynchronize();
-			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (flow_gradient[round].value, dinput_gate.value, xI_weight_change.value, xI_weight_change.row, hI_weight_change.column);
-			cudaDeviceSynchronize();
-			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (flow_gradient[round].value, dfogot_gate.value, xF_weight_change.value, xF_weight_change.row, hF_weight_change.column);
-			cudaDeviceSynchronize();
-			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (flow_gradient[round].value, dK.value, xK_weight_change.value, xK_weight_change.row, hK_weight_change.column);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xO_weight_change.value, doutput_gate.value, v[round].value, xO_weight.row, xO_weight.column);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hO_weight_change.value, doutput_gate.value, h[round].value, hO_weight.row, hO_weight.column);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xI_weight_change.value, dinput_gate.value, v[round].value, xI_weight.row, xI_weight.column);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hI_weight_change.value, dinput_gate.value, h[round].value, hI_weight.row, hI_weight.column);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xF_weight_change.value, dfogot_gate.value, v[round].value, xF_weight.row, xF_weight.column);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hF_weight_change.value, dfogot_gate.value, h[round].value, hF_weight.row, hF_weight.column);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (xK_weight_change.value, dK.value, v[round].value, xK_weight.row, xK_weight.column);
+			device_weightchange_computeLSTM << <blockPergrid, threadPerblock >> > (hK_weight_change.value, dK.value, h[round].value, hK_weight.row, hK_weight.column);
 			cudaDeviceSynchronize();
 
-			Obias_change = Obias_change + doutput_gate * learning_rate;										// compute changing bias
-			Ibias_change = Ibias_change + dinput_gate * learning_rate;
-			Fbias_change = Fbias_change + dfogot_gate * learning_rate;
-			Kbias_change = Kbias_change + dK * learning_rate;
+			blockPergrid = upper_value(double(value.get_size()) / 1024);
+			threadPerblock = std::min(value.get_size(), 1024);
+
+			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (next_dh.value, doutput_gate.value, hO_weight.value, hO_weight.row, hO_weight.column);
+			cudaDeviceSynchronize();
+			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (next_dh.value, dinput_gate.value, hI_weight.value, hI_weight.row, hI_weight.column);
+			cudaDeviceSynchronize();
+			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (next_dh.value, dfogot_gate.value, hF_weight.value, hF_weight.row, hF_weight.column);
+			cudaDeviceSynchronize();
+			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (next_dh.value, dK.value, hK_weight.value, hK_weight.row, hK_weight.column);
+			cudaDeviceSynchronize();
+			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (flow_gradient[round].value, doutput_gate.value, xO_weight.value, xO_weight.row, hO_weight.column);
+			cudaDeviceSynchronize();
+			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (flow_gradient[round].value, dinput_gate.value, xI_weight.value, xI_weight.row, hI_weight.column);
+			cudaDeviceSynchronize();
+			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (flow_gradient[round].value, dfogot_gate.value, xF_weight.value, xF_weight.row, hF_weight.column);
+			cudaDeviceSynchronize();
+			device_flow_computeLSTM << <blockPergrid, threadPerblock >> > (flow_gradient[round].value, dK.value, xK_weight.value, xK_weight.row, hK_weight.column);
+			cudaDeviceSynchronize();
+
+			Obias_change = Obias_change + doutput_gate;										// compute changing bias
+			Ibias_change = Ibias_change + dinput_gate;
+			Fbias_change = Fbias_change + dfogot_gate;
+			Kbias_change = Kbias_change + dK;
 
 			next_dc = mul_each(dc, fogot_gate);																	// compute next time step cell state error
 
@@ -232,16 +235,18 @@ public:
 			dc = next_dc;
 			
 			// try to descale exploding gradient
-			double max_dh_value = std::max(get_max(dh), std::abs(get_min(dh)));									
+			double max_dh_value = std::max(get_max(dh), std::abs(get_min(dh)));
 			double max_dc_value = std::max(get_max(dc), std::abs(get_min(dc)));
 			
 			double flow_cap = std::sqrt(double(2) / v.size());
-			if (max_dh_value > flow_cap) dh = dh * (flow_cap / max_dh_value);
-			if (max_dc_value > flow_cap) dc = dc * (flow_cap / max_dc_value);
+			if (max_dh_value > flow_cap) 
+				dh = dh * (flow_cap / max_dh_value);
+			if (max_dc_value > flow_cap) 
+				dc = dc * (flow_cap / max_dc_value);
 		}
 													// compute initial cell state
-		init_h_change = init_h_change + dh * learning_rate;
-		init_c_change = init_c_change + dc * learning_rate;
+		init_h_change = init_h_change + dh;
+		init_c_change = init_c_change + dc;
 
 		return flow_gradient;
 	}
@@ -275,24 +280,164 @@ public:
 
 
 	void change_dependencies() {
-		xO_weight = xO_weight_change + xO_weight;
-		xF_weight = xF_weight_change + xF_weight;
-		xI_weight = xI_weight_change + xI_weight;
-		xK_weight = xK_weight_change + xK_weight;
-		hO_weight = hO_weight_change + hO_weight;
-		hF_weight = hF_weight_change + hF_weight;
-		hI_weight = hI_weight_change + hI_weight;
-		hK_weight = hK_weight_change + hK_weight;
+		++t;
+		if (optimizer == Layer::SGD) {
+			xO_weight = xO_weight_change * learning_rate + xO_weight;
+			xF_weight = xF_weight_change * learning_rate + xF_weight;
+			xI_weight = xI_weight_change * learning_rate + xI_weight;
+			xK_weight = xK_weight_change * learning_rate + xK_weight;
+			hO_weight = hO_weight_change * learning_rate + hO_weight;
+			hF_weight = hF_weight_change * learning_rate + hF_weight;
+			hI_weight = hI_weight_change * learning_rate + hI_weight;
+			hK_weight = hK_weight_change * learning_rate + hK_weight;
 
-		Obias = Obias_change + Obias;
-		Fbias = Fbias_change + Fbias;
-		Ibias = Ibias_change + Ibias;
-		Kbias = Kbias_change + Kbias;
+			Obias = Obias_change * learning_rate + Obias;
+			Fbias = Fbias_change * learning_rate + Fbias;
+			Ibias = Ibias_change * learning_rate + Ibias;
+			Kbias = Kbias_change * learning_rate + Kbias;
 
-		init_c = init_c + init_c_change;
-		init_h = init_h + init_h_change;
+			init_c = init_c + init_c_change * learning_rate;
+			init_h = init_h + init_h_change * learning_rate;
+		}
+		else if (optimizer == Layer::MOMENTUM) {
+			set_up_Matrix(s_xO_weight_change, xO_weight);
+			set_up_Matrix(s_xF_weight_change, xF_weight);
+			set_up_Matrix(s_xI_weight_change, xI_weight);
+			set_up_Matrix(s_xK_weight_change, xK_weight);
+			set_up_Matrix(s_hO_weight_change, hO_weight);
+			set_up_Matrix(s_hF_weight_change, hF_weight);
+			set_up_Matrix(s_hI_weight_change, hI_weight);
+			set_up_Matrix(s_hK_weight_change, hK_weight);
+
+			set_up_Matrix(s_Obias_change, Obias);
+			set_up_Matrix(s_Fbias_change, Fbias);
+			set_up_Matrix(s_Ibias_change, Ibias);
+			set_up_Matrix(s_Kbias_change, Kbias);
+
+			set_up_Matrix(s_init_c_change, init_c);
+			set_up_Matrix(s_init_h_change, init_h);
+
+			s_xO_weight_change = s_xO_weight_change * decay_rate + xO_weight_change * (double(1) - decay_rate);
+			s_xF_weight_change = s_xF_weight_change * decay_rate + xF_weight_change * (double(1) - decay_rate);
+			s_xI_weight_change = s_xI_weight_change * decay_rate + xI_weight_change * (double(1) - decay_rate);
+			s_xK_weight_change = s_xK_weight_change * decay_rate + xK_weight_change * (double(1) - decay_rate);
+			s_hO_weight_change = s_hO_weight_change * decay_rate + xO_weight_change * (double(1) - decay_rate);
+			s_hF_weight_change = s_hF_weight_change * decay_rate + xF_weight_change * (double(1) - decay_rate);
+			s_hI_weight_change = s_hI_weight_change * decay_rate + xI_weight_change * (double(1) - decay_rate);
+			s_hK_weight_change = s_hK_weight_change * decay_rate + xK_weight_change * (double(1) - decay_rate);
+
+			s_Obias_change = s_Obias_change * decay_rate + Obias_change * (double(1) - decay_rate);
+			s_Fbias_change = s_Fbias_change * decay_rate + Fbias_change * (double(1) - decay_rate);
+			s_Ibias_change = s_Ibias_change * decay_rate + Ibias_change * (double(1) - decay_rate);
+			s_Kbias_change = s_Kbias_change * decay_rate + Kbias_change * (double(1) - decay_rate);
+
+			s_init_c_change = s_init_c_change * decay_rate + init_c_change * (double(1) - decay_rate);
+			s_init_h_change = s_init_h_change * decay_rate + init_h_change * (double(1) - decay_rate);
+
+			xO_weight = s_xO_weight_change * learning_rate + xO_weight;
+			xF_weight = s_xF_weight_change * learning_rate + xF_weight;
+			xI_weight = s_xI_weight_change * learning_rate + xI_weight;
+			xK_weight = s_xK_weight_change * learning_rate + xK_weight;
+			hO_weight = s_hO_weight_change * learning_rate + hO_weight;
+			hF_weight = s_hF_weight_change * learning_rate + hF_weight;
+			hI_weight = s_hI_weight_change * learning_rate + hI_weight;
+			hK_weight = s_hK_weight_change * learning_rate + hK_weight;
+
+			Obias = s_Obias_change * learning_rate + Obias;
+			Fbias = s_Fbias_change * learning_rate + Fbias;
+			Ibias = s_Ibias_change * learning_rate + Ibias;
+			Kbias = s_Kbias_change * learning_rate + Kbias;
+
+			init_c = init_c + s_init_c_change * learning_rate;
+			init_h = init_h + s_init_h_change * learning_rate;
+		}
+		else if (optimizer == Layer::ADAM) {
+			set_up_Matrix(s_xO_weight_change, xO_weight);
+			set_up_Matrix(s_xF_weight_change, xF_weight);
+			set_up_Matrix(s_xI_weight_change, xI_weight);
+			set_up_Matrix(s_xK_weight_change, xK_weight);
+			set_up_Matrix(s_hO_weight_change, hO_weight);
+			set_up_Matrix(s_hF_weight_change, hF_weight);
+			set_up_Matrix(s_hI_weight_change, hI_weight);
+			set_up_Matrix(s_hK_weight_change, hK_weight);
+
+			set_up_Matrix(s_Obias_change, Obias);
+			set_up_Matrix(s_Fbias_change, Fbias);
+			set_up_Matrix(s_Ibias_change, Ibias);
+			set_up_Matrix(s_Kbias_change, Kbias);
+
+			set_up_Matrix(s_init_c_change, init_c);
+			set_up_Matrix(s_init_h_change, init_h);
+
+			set_up_Matrix(ss_xO_weight_change, xO_weight);
+			set_up_Matrix(ss_xF_weight_change, xF_weight);
+			set_up_Matrix(ss_xI_weight_change, xI_weight);
+			set_up_Matrix(ss_xK_weight_change, xK_weight);
+			set_up_Matrix(ss_hO_weight_change, hO_weight);
+			set_up_Matrix(ss_hF_weight_change, hF_weight);
+			set_up_Matrix(ss_hI_weight_change, hI_weight);
+			set_up_Matrix(ss_hK_weight_change, hK_weight);
+
+			set_up_Matrix(ss_Obias_change, Obias);
+			set_up_Matrix(ss_Fbias_change, Fbias);
+			set_up_Matrix(ss_Ibias_change, Ibias);
+			set_up_Matrix(ss_Kbias_change, Kbias);
+
+			set_up_Matrix(ss_init_c_change, init_c);
+			set_up_Matrix(ss_init_h_change, init_h);
+
+			s_xO_weight_change = s_xO_weight_change * decay_rate + xO_weight_change * (double(1) - decay_rate);
+			s_xF_weight_change = s_xF_weight_change * decay_rate + xF_weight_change * (double(1) - decay_rate);
+			s_xI_weight_change = s_xI_weight_change * decay_rate + xI_weight_change * (double(1) - decay_rate);
+			s_xK_weight_change = s_xK_weight_change * decay_rate + xK_weight_change * (double(1) - decay_rate);
+			s_hO_weight_change = s_hO_weight_change * decay_rate + xO_weight_change * (double(1) - decay_rate);
+			s_hF_weight_change = s_hF_weight_change * decay_rate + xF_weight_change * (double(1) - decay_rate);
+			s_hI_weight_change = s_hI_weight_change * decay_rate + xI_weight_change * (double(1) - decay_rate);
+			s_hK_weight_change = s_hK_weight_change * decay_rate + xK_weight_change * (double(1) - decay_rate);
+
+			s_Obias_change = s_Obias_change * decay_rate + Obias_change * (double(1) - decay_rate);
+			s_Fbias_change = s_Fbias_change * decay_rate + Fbias_change * (double(1) - decay_rate);
+			s_Ibias_change = s_Ibias_change * decay_rate + Ibias_change * (double(1) - decay_rate);
+			s_Kbias_change = s_Kbias_change * decay_rate + Kbias_change * (double(1) - decay_rate);
+
+			s_init_c_change = s_init_c_change * decay_rate + init_c_change * (double(1) - decay_rate);
+			s_init_h_change = s_init_h_change * decay_rate + init_h_change * (double(1) - decay_rate);
+
+			ss_xO_weight_change = ss_xO_weight_change * decay_rate + mul_each(xO_weight_change, xO_weight_change) * (double(1) - decay_rate);
+			ss_xF_weight_change = ss_xF_weight_change * decay_rate + mul_each(xF_weight_change, xF_weight_change) * (double(1) - decay_rate);
+			ss_xI_weight_change = ss_xI_weight_change * decay_rate + mul_each(xI_weight_change, xI_weight_change) * (double(1) - decay_rate);
+			ss_xK_weight_change = ss_xK_weight_change * decay_rate + mul_each(xK_weight_change, xK_weight_change) * (double(1) - decay_rate);
+			ss_hO_weight_change = ss_hO_weight_change * decay_rate + mul_each(hO_weight_change, hO_weight_change) * (double(1) - decay_rate);
+			ss_hF_weight_change = ss_hF_weight_change * decay_rate + mul_each(hF_weight_change, hF_weight_change) * (double(1) - decay_rate);
+			ss_hI_weight_change = ss_hI_weight_change * decay_rate + mul_each(hI_weight_change, hI_weight_change) * (double(1) - decay_rate);
+			ss_hK_weight_change = ss_hK_weight_change * decay_rate + mul_each(hK_weight_change, hK_weight_change) * (double(1) - decay_rate);
+
+			ss_Obias_change = ss_Obias_change * decay_rate + mul_each(Obias_change, Obias_change) * (double(1) - decay_rate);
+			ss_Fbias_change = ss_Fbias_change * decay_rate + mul_each(Fbias_change, Fbias_change) * (double(1) - decay_rate);
+			ss_Ibias_change = ss_Ibias_change * decay_rate + mul_each(Ibias_change, Ibias_change) * (double(1) - decay_rate);
+			ss_Kbias_change = ss_Kbias_change * decay_rate + mul_each(Kbias_change, Kbias_change) * (double(1) - decay_rate);
+
+			ss_init_c_change = ss_init_c_change * decay_rate + mul_each(init_c_change, init_c_change) * (double(1) - decay_rate);
+			ss_init_h_change = ss_init_h_change * decay_rate + mul_each(init_h_change, init_h_change) * (double(1) - decay_rate);
+
+			xO_weight = xO_weight + devide_each(s_xO_weight_change * learning_rate, pow_each(ss_xO_weight_change, 0.5) + 0.0000001);
+			xF_weight = xF_weight + devide_each(s_xF_weight_change * learning_rate, pow_each(ss_xF_weight_change, 0.5) + 0.0000001);
+			xI_weight = xI_weight + devide_each(s_xI_weight_change * learning_rate, pow_each(ss_xI_weight_change, 0.5) + 0.0000001);
+			xK_weight = xK_weight + devide_each(s_xK_weight_change * learning_rate, pow_each(ss_xK_weight_change, 0.5) + 0.0000001);
+			hO_weight = hO_weight + devide_each(s_hO_weight_change * learning_rate, pow_each(ss_hO_weight_change, 0.5) + 0.0000001);
+			hF_weight = hF_weight + devide_each(s_hF_weight_change * learning_rate, pow_each(ss_hF_weight_change, 0.5) + 0.0000001);
+			hI_weight = hI_weight + devide_each(s_hI_weight_change * learning_rate, pow_each(ss_hI_weight_change, 0.5) + 0.0000001);
+			hK_weight = hK_weight + devide_each(s_hK_weight_change * learning_rate, pow_each(ss_hK_weight_change, 0.5) + 0.0000001);
+
+			Obias = Obias + devide_each(s_Obias_change * learning_rate, pow_each(ss_Obias_change, 0.5) + 0.0000001);
+			Fbias = Fbias + devide_each(s_Fbias_change * learning_rate, pow_each(ss_Fbias_change, 0.5) + 0.0000001);
+			Ibias = Ibias + devide_each(s_Ibias_change * learning_rate, pow_each(ss_Ibias_change, 0.5) + 0.0000001);
+			Kbias = Kbias + devide_each(s_Kbias_change * learning_rate, pow_each(ss_Kbias_change, 0.5) + 0.0000001);
+
+			init_c = init_c + devide_each(s_init_c_change * learning_rate, pow_each(ss_init_c_change, 0.5) + 0.0000001);
+			init_h = init_h + devide_each(s_init_h_change * learning_rate, pow_each(ss_init_h_change, 0.5) + 0.0000001);
+		}
 	}
-
 	void set_change_dependencies(const double& number) {
 		set_Matrix(xO_weight_change,number);
 		set_Matrix(xF_weight_change,number);
@@ -463,10 +608,10 @@ public:
 			xF_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
 			xI_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
 			xK_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max);
-			hO_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
-			hF_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
-			hI_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
-			hK_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) / 10;
+			hO_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) ;
+			hF_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) ;
+			hI_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) ;
+			hK_weightHost[i] = mapping(rand() % 10000, 0, 10000, min, max) ;
 		}
 		cudaMemcpy(xO_weight.value, xO_weightHost, xO_weight.get_sizeb(), cudaMemcpyHostToDevice);
 		cudaMemcpy(xI_weight.value, xI_weightHost, xI_weight.get_sizeb(), cudaMemcpyHostToDevice);
@@ -500,10 +645,10 @@ public:
 			xF_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
 			xI_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
 			xK_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second);
-			hO_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
-			hF_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
-			hI_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
-			hK_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) / 10;
+			hO_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) ;
+			hF_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) ;
+			hI_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) ;
+			hK_weightHost[i] = mapping(rand() % 10000, 0, 10000, setting.first, setting.second) ;
 		}
 		cudaMemcpy(xO_weight.value, xO_weightHost, xO_weight.get_sizeb(), cudaMemcpyHostToDevice);
 		cudaMemcpy(xI_weight.value, xI_weightHost, xI_weight.get_sizeb(), cudaMemcpyHostToDevice);
@@ -537,10 +682,10 @@ public:
 			xF_weightHost[i] = func();
 			xI_weightHost[i] = func();
 			xK_weightHost[i] = func();
-			hO_weightHost[i] = func() / 10;
-			hF_weightHost[i] = func() / 10;
-			hI_weightHost[i] = func() / 10;
-			hK_weightHost[i] = func() / 10;
+			hO_weightHost[i] = func();
+			hF_weightHost[i] = func();
+			hI_weightHost[i] = func();
+			hK_weightHost[i] = func();
 		}
 		cudaMemcpy(xO_weight.value, xO_weightHost, xO_weight.get_sizeb(), cudaMemcpyHostToDevice);
 		cudaMemcpy(xI_weight.value, xI_weightHost, xI_weight.get_sizeb(), cudaMemcpyHostToDevice);
@@ -574,10 +719,10 @@ public:
 			xF_weightHost[i] = func(value.row, next);
 			xI_weightHost[i] = func(value.row, next);
 			xK_weightHost[i] = func(value.row, next);
-			hO_weightHost[i] = func(value.row, next) / 10;
-			hF_weightHost[i] = func(value.row, next) / 10;
-			hI_weightHost[i] = func(value.row, next) / 10;
-			hK_weightHost[i] = func(value.row, next) / 10;
+			hO_weightHost[i] = func(value.row, next);
+			hF_weightHost[i] = func(value.row, next);
+			hI_weightHost[i] = func(value.row, next);
+			hK_weightHost[i] = func(value.row, next);
 		}
 		cudaMemcpy(xO_weight.value, xO_weightHost, xO_weight.get_sizeb(), cudaMemcpyHostToDevice);
 		cudaMemcpy(xI_weight.value, xI_weightHost, xI_weight.get_sizeb(), cudaMemcpyHostToDevice);
@@ -849,10 +994,32 @@ protected:
 				universal_set_func(dKact_func, setting, i);
 			else if (a == "learning_rate")
 				set_learning_rate(setting, i);
+			else if (a == "decay_rate")
+				set_decay_rate(setting, i);
+			else if (a == "opt")
+				set_optimizer(setting, i);
 			else if (a == "")
 				;
 			else throw "command not found";
 		}
+	}
+
+	void set_decay_rate(const std::string& str, int& i) {
+		double a = get_number(str, i);
+		decay_rate = a;
+	}
+
+	void set_optimizer(const std::string& str, int& i) {
+		std::string _opt = get_text(str, i);
+		if (_opt == "SGD")
+			optimizer = Layer::SGD;
+		else if (_opt == "MOMENTUM")
+			optimizer = Layer::MOMENTUM;
+		else if (_opt == "ADAM")
+			optimizer = Layer::ADAM;
+		else if (_opt == "")
+			;
+		else throw "optimizer not found";
 	}
 
 	void set_learning_rate(const std::string& str, int& i) {
@@ -894,6 +1061,40 @@ protected:
 
 	Matrix<double> init_c_change;																			// changing initial cell state
 	Matrix<double> init_h_change;																			// changing initial hidden
+
+	Matrix<double> s_xO_weight_change;
+	Matrix<double> s_xF_weight_change;
+	Matrix<double> s_xI_weight_change;
+	Matrix<double> s_xK_weight_change;
+	Matrix<double> s_hO_weight_change;
+	Matrix<double> s_hF_weight_change;
+	Matrix<double> s_hI_weight_change;
+	Matrix<double> s_hK_weight_change;
+
+	Matrix<double> s_Obias_change;
+	Matrix<double> s_Fbias_change;
+	Matrix<double> s_Ibias_change;
+	Matrix<double> s_Kbias_change;
+
+	Matrix<double> s_init_c_change;
+	Matrix<double> s_init_h_change;
+
+	Matrix<double> ss_xO_weight_change;
+	Matrix<double> ss_xF_weight_change;
+	Matrix<double> ss_xI_weight_change;
+	Matrix<double> ss_xK_weight_change;
+	Matrix<double> ss_hO_weight_change;
+	Matrix<double> ss_hF_weight_change;
+	Matrix<double> ss_hI_weight_change;
+	Matrix<double> ss_hK_weight_change;
+
+	Matrix<double> ss_Obias_change;
+	Matrix<double> ss_Fbias_change;
+	Matrix<double> ss_Ibias_change;
+	Matrix<double> ss_Kbias_change;
+
+	Matrix<double> ss_init_c_change;
+	Matrix<double> ss_init_h_change;
 	
 	std::vector<Matrix<double>> c;																			// cell state memory
 	std::vector<Matrix<double>> h;																			// output memory

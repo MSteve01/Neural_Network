@@ -94,7 +94,13 @@ double mapping(const double& value, const double& min1, const double& max1, cons
 
 Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right);
 
+Matrix<double> devide_each(const Matrix<double>& left, const Matrix<double>& right);
+
+Matrix<double> pow_each(const Matrix<double>& left, const double p);
+
 void set_Matrix(Matrix<double>& M, double value);
+
+void set_up_Matrix(Matrix<double>& M, const Matrix<double>& B);
 
 double get_max(const Matrix<double>& M);
 
@@ -112,12 +118,12 @@ void universal_set_func(std::function<Matrix<double>(const Matrix<double>&)>& fu
 
 void universal_set_func(std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)>& func, const std::string& setting, int& i);
 
-__global__ void device_weightchange_computeLSTM(double* weight_change, const double* dgate, const double* v, const int weight_row, const int weight_column, const double learning_rate);
+__global__ void device_weightchange_computeLSTM(double* weight_change, const double* dgate, const double* v, const int weight_row, const int weight_column);
 
 __global__ void device_flow_computeLSTM(double* flow, const double* dgate, const double* weight, const int weight_row, const int weight_column);
 
 
-__global__ void device_weightchange_computeDENSE(double* weight_change, const double* doutput, const double* value, const int doutput_size, const int value_size, const double learning_rate);
+__global__ void device_weightchange_computeDENSE(double* weight_change, const double* doutput, const double* value, const int doutput_size, const int value_size);
 
 __global__ void device_flow_computeDENSE(double* value_change, const double* doutput, const double* weight, const int weightrow, const int weightcolumn);
 

@@ -2,6 +2,10 @@
 #include "Header.cuh"
 #include "Matrix.cu"
 
+void set_Matrix(Matrix<double>& M, double value);
+double get_max(const Matrix<double>& M);
+double get_min(const Matrix<double>& M);
+
 int upper_value(const double& a) {
 	if (a != int(a))
 		return int(a) + 1;
@@ -65,6 +69,21 @@ __global__ void device_softmax_func(double* value,const int sum, const int size)
 		return;
 
 	double result = value[pos] / sum;
+	if (result != result)
+		result = 0.000001;
+
+	value[pos] = result;
+}
+
+__global__ void device_dsoftmax_func(double* value, const double* output, const double* gradient, const int size) {
+	int pos = blockDim.x * blockIdx.x + threadIdx.x;
+	if (pos >= size)
+		return;
+
+	double result = 0;
+	for (int i = 0; i < size; i++) {
+		result += output[i] * ((i == pos) - output[pos]) * gradient[i];
+	}
 	if (result != result)
 		result = 0.000001;
 
@@ -167,18 +186,6 @@ __global__ void device_getminBru_func(double* getmin, const double* value, const
 	(*getmin) = _min;
 }
 
-__global__ void device_dsoftmax_func(double* value, const double* gradient,const int sum, const int size) {
-	int pos = blockDim.x * blockIdx.x + threadIdx.x;
-	if (pos >= size)
-		return;
-
-	double result = value[pos] * (sum + 1) * gradient[pos];
-	if (result != result)
-		result = 0.000001;
-
-	value[pos] = result;
-}
-
 __global__ void device_muleach_func(double* result, const double* value1, const double* value2, const int size) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -188,10 +195,26 @@ __global__ void device_muleach_func(double* result, const double* value1, const 
 	result[i] = value1[i] * value2[i];
 }
 
+__global__ void device_devideeach_func(double* result, const double* left, const double* right, const int size) {
+	int i = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (i < size) {
+		result[i] = left[i] / right[i];
+	}
+}
+
+__global__ void device_poweach_func(double* result, const double* M, const double p, const int size) {
+	int i = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (i < size) {
+		result[i] = pow(M[i], p);
+	}
+}
+
 __global__ void device_plus_func(double* result, const double number, const int size) {
-	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i < size)
-		result[i] += number;
+	int pos = blockIdx.x * blockDim.x + threadIdx.x;
+	if (pos < size)
+		result[pos] += number;
 }
 
 __global__ void device_ccentloss_func(double* result, const double* target, const int size) {
@@ -203,9 +226,9 @@ __global__ void device_ccentloss_func(double* result, const double* target, cons
 __global__ void device_dccentloss_func(double* result, const double* target, const int size) {
 	int pos = blockIdx.x * blockDim.x + threadIdx.x;
 	if (pos < size) {
+		if (result[pos] < 0.00001)
+			result[pos] = 0.00001;
 		result[pos] = target[pos] / result[pos];
-		if (result[pos] != result[pos])
-			result[pos] = 0.0000001;
 	}
 }
 
@@ -304,8 +327,7 @@ void get_min(double* result, const double* value, const int _size) {
 
 std::function<Matrix<double>(const Matrix<double>&)> 
 sigmoid_func = [] (const Matrix<double>& input) {
-	Matrix<double> result(input.row, input.column);
-	cudaMemcpy(result.value, input.value, result.get_sizeb(), cudaMemcpyDeviceToDevice);
+	Matrix<double> result(input);
 	int blockPergrid = upper_value(double(input.get_size()) / 1024);
 	int threadPerblock = std::min(input.get_size(), 1024);
 	device_sigmoid_func << <blockPergrid, threadPerblock >> > (result.value, result.get_size());
@@ -315,8 +337,7 @@ sigmoid_func = [] (const Matrix<double>& input) {
 
 std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)> 
 dsigmoid_func = [] (const Matrix<double>& input, const Matrix<double> gradient) {
-	Matrix<double> result(input.row, input.column);
-	cudaMemcpy(result.value, input.value, result.get_sizeb(), cudaMemcpyDeviceToDevice);
+	Matrix<double> result(input);
 	int blockPergrid = upper_value(double(input.get_size()) / 1024);
 	int threadPerblock = std::min(input.get_size(), 1024);
 	device_dsigmoid_func << <blockPergrid, threadPerblock >> > (result.value, gradient.value, input.get_size());
@@ -326,8 +347,7 @@ dsigmoid_func = [] (const Matrix<double>& input, const Matrix<double> gradient) 
 
 std::function<Matrix<double>(const Matrix<double>&)> 
 tanh_func = [] (const Matrix<double>& input) {
-	Matrix<double> result(input.row, input.column);
-	cudaMemcpy(result.value, input.value, result.get_sizeb(), cudaMemcpyDeviceToDevice);
+	Matrix<double> result(input);
 	int blockPergrid = upper_value(double(input.get_size()) / 1024);
 	int threadPerblock = std::min(input.get_size(), 1024);
 	device_tanh_func << <blockPergrid, threadPerblock >> > (result.value, input.get_size());
@@ -337,8 +357,7 @@ tanh_func = [] (const Matrix<double>& input) {
 
 std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)> 
 dtanh_func = [] (const Matrix<double>& input, const Matrix<double>& gradient) {
-	Matrix<double> result(input.row, input.column);
-	cudaMemcpy(result.value, input.value, result.get_sizeb(), cudaMemcpyDeviceToDevice);
+	Matrix<double> result(input);
 	int blockPergrid = upper_value(double(input.get_size()) / 1024);
 	int threadPerblock = std::min(input.get_size(), 1024);
 	device_dtanh_func << <blockPergrid, threadPerblock >> > (result.value, gradient.value, input.get_size());
@@ -358,43 +377,39 @@ dlinear_func = [] (const Matrix<double>& input, const Matrix<double>& gradient) 
 
 std::function<Matrix<double>(const Matrix<double>&)> 
 soft_max = [] (const Matrix<double>& input) {
-	Matrix<double> result(input.row, input.column);
-	double* cpy;
-	double sum = 0;
+	Matrix<double> result(input);
 	int blockPergrid = upper_value(double(input.get_size()) / 1024);
 	int threadPerblock = std::min(input.get_size(), 1024);
-	cudaMalloc(&cpy, result.get_sizeb());
-	cudaMemcpy(cpy, input.value, input.get_sizeb(), cudaMemcpyDeviceToDevice);
-	device_exp_func << <blockPergrid, threadPerblock >> > (cpy, input.get_size());
+	
+	device_exp_func << <blockPergrid, threadPerblock >> > (result.value , result.get_size());
 	cudaDeviceSynchronize();
 
-	get_sum(&sum, cpy, input.get_size());
+	double sum = 0;
+	get_sum(&sum, result.value, result.get_size());
 
-	device_softmax_func << <blockPergrid, threadPerblock >> > (cpy, sum, input.get_size());
+	device_softmax_func << <blockPergrid, threadPerblock >> > (result.value, sum, result.get_size());
 	cudaDeviceSynchronize();
-	cudaMemcpy(result.value, cpy, result.get_sizeb(), cudaMemcpyDeviceToDevice);
-
-	cudaFree(cpy);
+	
 	return result;
 };
 
 std::function<Matrix<double>(const Matrix<double>&,const Matrix<double>&)> 
 dsoft_max = [] (const Matrix<double>& input, const Matrix<double>& gradient) {
-	Matrix<double> result = soft_max(input);
-	double sum;
-	get_sum(&sum, result.value, result.get_size());
-
+	Matrix<double> get_soft = soft_max(input);
+	Matrix<double> result(input.row, input.column);
+	set_Matrix(result, 0);
 	int blockPergrid = upper_value(double(result.get_size()) / 1024);
 	int threadPerblock = std::min(result.get_size(), 1024);
-	device_dsoftmax_func << <blockPergrid, threadPerblock >> > (result.value, gradient.value, sum, result.get_size());
+	device_dsoftmax_func << <blockPergrid, threadPerblock >> > (result.value, get_soft.value, gradient.value, result.get_size());
 	cudaDeviceSynchronize();
+
+	
 	return result;
 };
 
 std::function<Matrix<double>(const Matrix<double>&)> 
 descale_func = [] (const Matrix<double>& input) {
-	Matrix<double> result(input.row, input.column);
-	cudaMemcpy(result.value, input.value, input.get_sizeb(), cudaMemcpyDeviceToDevice);
+	Matrix<double> result(input);
 	double max_value = 0;
 	get_max(&max_value, result.value, result.get_size());
 	int blockPergrid = upper_value(double(result.get_size()) / 1024);
@@ -425,8 +440,7 @@ catagorical_CEnt_loss_func = [] (const Matrix<double>& input, const Matrix<doubl
 
 std::function<Matrix<double>(const Matrix<double>&, const Matrix<double>&)> 
 dcatagorical_CEnt_loss_func = [] (const Matrix<double>& input,const Matrix<double>& target) {
-	Matrix<double> result(input.row, input.column);
-	cudaMemcpy(result.value, input.value, result.get_sizeb(), cudaMemcpyDeviceToDevice);
+	Matrix<double> result(input);
 	int blockPergrid = upper_value(double(result.get_size()) / 1024);
 	int threadPerblock = std::min(result.get_size(), 1024);
 	device_dccentloss_func << <blockPergrid, threadPerblock >> > (result.value, target.value, result.get_size());
@@ -456,11 +470,38 @@ Matrix<double> mul_each(const Matrix<double>& left, const Matrix<double>& right)
 	return result;
 }
 
+Matrix<double> devide_each(const Matrix<double>& left, const Matrix<double>& right) {
+	if(left.row != right.row || left.column != right.column)
+		throw "invalid devision each elemenet";
+	Matrix<double> result(left.row, left.column);
+	int blockPergrid = upper_value(double(result.get_size()) / 1024);
+	int threadPerblock = std::min(result.get_size(), 1024);
+	device_devideeach_func << <blockPergrid, threadPerblock >> > (result.value, left.value, right.value, result.get_size());
+	cudaDeviceSynchronize();
+	return result;
+}
+
+Matrix<double> pow_each(const Matrix<double>& left, const double p) {
+	Matrix<double> result(left.row, left.column);
+	int blockPergrid = upper_value(double(result.get_size()) / 1024);
+	int threadPerblock = std::min(result.get_size(), 1024);
+	device_poweach_func << <blockPergrid, threadPerblock >> > (result.value, left.value, p, result.get_size());
+	cudaDeviceSynchronize();
+	return result;
+}
+
 void set_Matrix(Matrix<double>& M, double value) { // set every Matrix's member to specific number
 	int blockPergrid = upper_value(double(M.get_size()) / 1024);
 	int threadPerblock = std::min(M.get_size(), 1024);
 	device_set_matrix << <blockPergrid, threadPerblock >> > (M.value, value, M.get_size());
 	cudaDeviceSynchronize();
+}
+
+void set_up_Matrix(Matrix<double>& M, const Matrix<double>& B) {
+	if (!M.is_constructed()) {
+		M.reconstruct(B.row, B.column);
+		set_Matrix(M, 0);
+	}
 }
 
 double get_max(const Matrix<double>& M) { // get max value of the Matrix
@@ -536,31 +577,30 @@ void universal_set_func(std::function<Matrix<double>(const Matrix<double>&,const
 	else throw "function not found";
 }
 
-__global__ void device_weightchange_computeLSTM(double* weight_change, const double* dgate, const double* v, const int weight_row, const int weight_column, const double learning_rate) {
+__global__ void device_weightchange_computeLSTM(double* weight_change, const double* dgate, const double* v, const int weight_row, const int weight_column) {
 	int pos = blockIdx.x * blockDim.x + threadIdx.x;
 	int r = pos / weight_column;
 	int c = pos % weight_column;
 	if (r < weight_row && c < weight_column) {
-		weight_change[pos] += dgate[r] * v[c] * learning_rate;
+		weight_change[pos] += dgate[r] * v[c];
 	}
 }
 
 __global__ void device_flow_computeLSTM(double* flow, const double* dgate, const double* weight, const int weight_row, const int weight_column) {
 	int pos = blockIdx.x * blockDim.x + threadIdx.x;
-	if (pos < weight_row) {
-		for (int i = 0; i < weight_column; i++) {
-			flow[pos] += dgate[pos] * weight[pos * weight_column + i];
+	if (pos < weight_column) {
+		for (int i = 0; i < weight_row; i++) {
+			flow[pos] += dgate[i] * weight[i * weight_column + pos];
 		}
 	}
 }
 
-
-__global__ void device_weightchange_computeDENSE(double* weight_change, const double* doutput, const double* value, const int doutput_size, const int value_size, const double learning_rate) {
+__global__ void device_weightchange_computeDENSE(double* weight_change, const double* doutput, const double* value, const int doutput_size, const int value_size) {
 	int pos = blockIdx.x * blockDim.x + threadIdx.x;
 	int i = pos / value_size;
 	int j = pos % value_size;
 	if (i < doutput_size && j < value_size) {
-		weight_change[pos] += doutput[i] * value[j] * learning_rate;
+		weight_change[pos] += doutput[i] * value[j];
 	}
 }
 
